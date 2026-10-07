@@ -1,0 +1,38 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
+
+export function BrandLogo({ size = 'md', to = '/', showText = true, className = '' }) {
+  const iconSizes = {
+    sm: 'w-7 h-7',
+    md: 'w-8 h-8 sm:w-9 sm:h-9',
+    lg: 'w-11 h-11',
+  };
+
+  const textSizes = {
+    sm: 'text-lg',
+    md: 'text-xl sm:text-2xl',
+    lg: 'text-2xl sm:text-3xl',
+  };
+
+  const content = (
+    <div className={`inline-flex items-center gap-2 select-none group cursor-pointer ${className}`}>
+      {/* CMCart Logo Icon from project assets */}
+      <img
+        src="/logo.png"
+        alt="CMCart Logo Icon"
+        className={`${iconSizes[size] || iconSizes.md} object-contain transition-transform group-hover:scale-105`}
+      />
+      {showText && (
+        <span className={`font-black tracking-tight ${textSizes[size] || textSizes.md} text-neutral-900 dark:text-white`}>
+          CM<span className="text-[#E63946]">Cart</span>
+        </span>
+      )}
+    </div>
+  );
+
+  if (to) {
+    return <Link to={to}>{content}</Link>;
+  }
+
+  return content;
+}
