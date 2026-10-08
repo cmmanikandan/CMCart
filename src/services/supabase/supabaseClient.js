@@ -225,11 +225,123 @@ function getCurrentAuthUser() {
   }
 }
 
+let isCatalogSyncing = false;
+let hasSyncedCatalog = false;
+
+export async function syncCatalogFromCloud() {
+  if (isCatalogSyncing) return;
+  isCatalogSyncing = true;
+  try {
+    const store = getStore();
+    let modified = false;
+
+    // 1. Fetch live products, categories, and banners from Supabase PostgreSQL
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        const { data: sbProds } = await supabase.from('products').select('*');
+        if (Array.isArray(sbProds) && sbProds.length > 0) {
+          sbProds.forEach((sbP) => {
+            const idx = store.products.findIndex((p) => p.id === sbP.id || p.slug === sbP.slug);
+            if (idx === -1) {
+              store.products.push(sbP);
+              modified = true;
+            } else {
+              store.products[idx] = { ...store.products[idx], ...sbP };
+              modified = true;
+            }
+          });
+        }
+
+        const { data: sbCats } = await supabase.from('categories').select('*');
+        if (Array.isArray(sbCats) && sbCats.length > 0) {
+          sbCats.forEach((sbC) => {
+            const idx = store.categories.findIndex((c) => c.id === sbC.id || c.slug === sbC.slug);
+            if (idx === -1) {
+              store.categories.push(sbC);
+              modified = true;
+            }
+          });
+        }
+
+        const { data: sbBans } = await supabase.from('banners').select('*');
+        if (Array.isArray(sbBans) && sbBans.length > 0) {
+          sbBans.forEach((sbB) => {
+            const idx = store.banners.findIndex((b) => b.id === sbB.id);
+            if (idx === -1) {
+              store.banners.push(sbB);
+              modified = true;
+            }
+          });
+        }
+      }
+    } catch (sbErr) {
+      console.warn('Supabase catalog fetch note:', sbErr?.message);
+    }
+
+    // 2. Fetch live products from Cloudinary resilient cloud database
+    try {
+      const { fetchCatalogFromCloud } = await import('../cloud/cloudSyncService');
+      const cloud = await fetchCatalogFromCloud();
+      if (cloud) {
+        if (Array.isArray(cloud.products) && cloud.products.length > 0) {
+          cloud.products.forEach((cP) => {
+            const idx = store.products.findIndex((p) => p.id === cP.id || p.slug === cP.slug);
+            if (idx === -1) {
+              store.products.push(cP);
+              modified = true;
+            }
+          });
+        }
+        if (Array.isArray(cloud.categories) && cloud.categories.length > 0) {
+          cloud.categories.forEach((cC) => {
+            const idx = store.categories.findIndex((c) => c.id === cC.id || c.slug === cC.slug);
+            if (idx === -1) {
+              store.categories.push(cC);
+              modified = true;
+            }
+          });
+        }
+        if (Array.isArray(cloud.banners) && cloud.banners.length > 0) {
+          cloud.banners.forEach((cB) => {
+            const idx = store.banners.findIndex((b) => b.id === cB.id);
+            if (idx === -1) {
+              store.banners.push(cB);
+              modified = true;
+            }
+          });
+        }
+      }
+    } catch (cErr) {
+      console.warn('Cloud catalog fetch note:', cErr?.message);
+    }
+
+    if (modified) {
+      saveStore(store);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cmcart_dataset_updated'));
+      }
+    }
+  } finally {
+    isCatalogSyncing = false;
+    hasSyncedCatalog = true;
+  }
+}
+
+// Auto-trigger background catalog sync on startup
+if (typeof window !== 'undefined') {
+  setTimeout(() => syncCatalogFromCloud(), 150);
+}
+
 // Commerce Service API
 export const commerceDb = {
   // PRODUCTS
   async getProducts(params = {}) {
-    const store = getStore();
+    let store = getStore();
+    if (store.products.length === 0 && !hasSyncedCatalog) {
+      await syncCatalogFromCloud();
+      store = getStore();
+    }
     let items = [...store.products];
 
     if (params.category) {
@@ -286,16 +398,21 @@ export const commerceDb = {
 
   async addProduct(product) {
     const store = getStore();
+    const cleanId = (product.id && product.id.length === 36)
+      ? product.id
+      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `prod-${Date.now()}`);
+
     const newProduct = {
-      id: `prod-${Date.now()}`,
-      slug: product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      rating: 5.0,
-      review_count: 0,
-      is_active: true,
+      id: cleanId,
+      slug: (product.slug || product.name || 'product').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      rating: Number(product.rating || 5.0),
+      review_count: Number(product.review_count || 0),
+      is_active: product.is_active ?? true,
       ...product,
-      current_price: Number(product.current_price),
-      original_price: Number(product.original_price),
-      discount_percentage: Math.round(((Number(product.original_price) - Number(product.current_price)) / Number(product.original_price)) * 100),
+      id: cleanId,
+      current_price: Number(product.current_price || 0),
+      original_price: Number(product.original_price || product.current_price || 0),
+      discount_percentage: Number(product.discount_percentage || (product.original_price && product.current_price ? Math.round(((Number(product.original_price) - Number(product.current_price)) / Number(product.original_price)) * 100) : 0)),
       images: product.images?.length ? product.images : [
         'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'
       ],
@@ -304,6 +421,40 @@ export const commerceDb = {
     };
     store.products.unshift(newProduct);
     saveStore(store);
+
+    // 1. Sync updated catalog to Cloudinary cloud (live across all devices)
+    import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+      saveCatalogToCloud(store);
+    }).catch(() => {});
+
+    // 2. Also insert into Supabase PostgreSQL products table
+    import('./supabaseInit').then(({ supabase }) => {
+      if (supabase) {
+        supabase.from('products').insert([{
+          id: newProduct.id,
+          name: newProduct.name,
+          slug: newProduct.slug,
+          description: newProduct.description || null,
+          category_id: (newProduct.category_id && newProduct.category_id.length === 36) ? newProduct.category_id : null,
+          category_name: newProduct.category_name || null,
+          brand: newProduct.brand || null,
+          sku: newProduct.sku || null,
+          current_price: newProduct.current_price,
+          original_price: newProduct.original_price,
+          discount_percentage: newProduct.discount_percentage,
+          stock: Number(newProduct.stock || 0),
+          is_active: newProduct.is_active,
+          images: newProduct.images || null,
+          variants: newProduct.variants || null,
+          specifications: newProduct.specifications || null,
+          offers: newProduct.offers || null,
+          updated_at: new Date().toISOString()
+        }]).then(({ error }) => {
+          if (error) console.warn('Supabase product insert note:', error.message);
+        });
+      }
+    }).catch(() => {});
+
     return newProduct;
   },
 
@@ -313,6 +464,24 @@ export const commerceDb = {
     if (idx !== -1) {
       store.products[idx] = { ...store.products[idx], ...updates };
       saveStore(store);
+
+      // Cloud catalog sync
+      import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+        saveCatalogToCloud(store);
+      }).catch(() => {});
+
+      // Supabase PostgreSQL update
+      import('./supabaseInit').then(({ supabase }) => {
+        if (supabase) {
+          supabase.from('products').update({
+            ...updates,
+            updated_at: new Date().toISOString()
+          }).eq('id', id).then(({ error }) => {
+            if (error) console.warn('Supabase product update note:', error.message);
+          });
+        }
+      }).catch(() => {});
+
       return store.products[idx];
     }
     return null;
@@ -322,26 +491,72 @@ export const commerceDb = {
     const store = getStore();
     store.products = store.products.filter(p => p.id !== id);
     saveStore(store);
+
+    // Cloud catalog sync
+    import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+      saveCatalogToCloud(store);
+    }).catch(() => {});
+
+    // Supabase PostgreSQL delete
+    import('./supabaseInit').then(({ supabase }) => {
+      if (supabase) {
+        supabase.from('products').delete().eq('id', id).then(({ error }) => {
+          if (error) console.warn('Supabase product delete note:', error.message);
+        });
+      }
+    }).catch(() => {});
+
     return true;
   },
 
   // CATEGORIES
   async getCategories() {
-    const store = getStore();
+    let store = getStore();
+    if (store.categories.length === 0 && !hasSyncedCatalog) {
+      await syncCatalogFromCloud();
+      store = getStore();
+    }
     return store.categories;
   },
 
   async addCategory(cat) {
     const store = getStore();
+    const cleanId = (cat.id && cat.id.length === 36)
+      ? cat.id
+      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cat-${Date.now()}`);
+
     const newCat = {
-      id: `cat-${Date.now()}`,
-      slug: cat.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      id: cleanId,
+      slug: (cat.slug || cat.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       itemCount: 0,
       is_active: true,
-      ...cat
+      ...cat,
+      id: cleanId
     };
     store.categories.push(newCat);
     saveStore(store);
+
+    import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+      saveCatalogToCloud(store);
+    }).catch(() => {});
+
+    import('./supabaseInit').then(({ supabase }) => {
+      if (supabase) {
+        supabase.from('categories').insert([{
+          id: newCat.id,
+          name: newCat.name,
+          slug: newCat.slug,
+          description: newCat.description || null,
+          icon: newCat.icon || null,
+          image_url: newCat.image_url || null,
+          is_active: newCat.is_active,
+          updated_at: new Date().toISOString()
+        }]).then(({ error }) => {
+          if (error) console.warn('Supabase category insert note:', error.message);
+        });
+      }
+    }).catch(() => {});
+
     return newCat;
   },
 
@@ -351,6 +566,22 @@ export const commerceDb = {
     if (idx !== -1) {
       store.categories[idx] = { ...store.categories[idx], ...updates };
       saveStore(store);
+
+      import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+        saveCatalogToCloud(store);
+      }).catch(() => {});
+
+      import('./supabaseInit').then(({ supabase }) => {
+        if (supabase) {
+          supabase.from('categories').update({
+            ...updates,
+            updated_at: new Date().toISOString()
+          }).eq('id', id).then(({ error }) => {
+            if (error) console.warn('Supabase category update note:', error.message);
+          });
+        }
+      }).catch(() => {});
+
       return store.categories[idx];
     }
     return null;
@@ -360,24 +591,68 @@ export const commerceDb = {
     const store = getStore();
     store.categories = store.categories.filter(c => c.id !== id);
     saveStore(store);
+
+    import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+      saveCatalogToCloud(store);
+    }).catch(() => {});
+
+    import('./supabaseInit').then(({ supabase }) => {
+      if (supabase) {
+        supabase.from('categories').delete().eq('id', id).then(({ error }) => {
+          if (error) console.warn('Supabase category delete note:', error.message);
+        });
+      }
+    }).catch(() => {});
+
     return true;
   },
 
   // BANNERS
   async getBanners() {
-    const store = getStore();
+    let store = getStore();
+    if (store.banners.length === 0 && !hasSyncedCatalog) {
+      await syncCatalogFromCloud();
+      store = getStore();
+    }
     return store.banners;
   },
 
   async addBanner(banner) {
     const store = getStore();
+    const cleanId = (banner.id && banner.id.length === 36)
+      ? banner.id
+      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ban-${Date.now()}`);
+
     const newBan = {
-      id: `ban-${Date.now()}`,
+      id: cleanId,
       is_active: true,
-      ...banner
+      ...banner,
+      id: cleanId
     };
     store.banners.push(newBan);
     saveStore(store);
+
+    import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+      saveCatalogToCloud(store);
+    }).catch(() => {});
+
+    import('./supabaseInit').then(({ supabase }) => {
+      if (supabase) {
+        supabase.from('banners').insert([{
+          id: newBan.id,
+          title: newBan.title,
+          subtitle: newBan.subtitle || null,
+          image_url: newBan.image_url,
+          link_url: newBan.link_url || null,
+          badge_text: newBan.badge_text || null,
+          is_active: newBan.is_active,
+          updated_at: new Date().toISOString()
+        }]).then(({ error }) => {
+          if (error) console.warn('Supabase banner insert note:', error.message);
+        });
+      }
+    }).catch(() => {});
+
     return newBan;
   },
 
@@ -387,6 +662,22 @@ export const commerceDb = {
     if (idx !== -1) {
       store.banners[idx] = { ...store.banners[idx], ...updates };
       saveStore(store);
+
+      import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+        saveCatalogToCloud(store);
+      }).catch(() => {});
+
+      import('./supabaseInit').then(({ supabase }) => {
+        if (supabase) {
+          supabase.from('banners').update({
+            ...updates,
+            updated_at: new Date().toISOString()
+          }).eq('id', id).then(({ error }) => {
+            if (error) console.warn('Supabase banner update note:', error.message);
+          });
+        }
+      }).catch(() => {});
+
       return store.banners[idx];
     }
     return null;
@@ -412,7 +703,8 @@ export const commerceDb = {
     }
     const uid = target.uid || target.id;
     const email = (target.email || '').toLowerCase().trim();
-    return (store.orders || []).filter(o => {
+
+    let matched = (store.orders || []).filter(o => {
       if (uid && o.user_id && o.user_id === uid) return true;
       if (email && o.user_email && o.user_email.toLowerCase() === email) return true;
       if (uid && o.shipping_address?.user_id && o.shipping_address.user_id === uid) return true;
@@ -420,6 +712,24 @@ export const commerceDb = {
       if (email && o.shipping_address?.email && o.shipping_address.email.toLowerCase() === email) return true;
       return false;
     });
+
+    if (matched.length === 0 && uid) {
+      try {
+        const { fetchUserFromCloud } = await import('../cloud/cloudSyncService');
+        const cloudData = await fetchUserFromCloud(uid);
+        if (cloudData && Array.isArray(cloudData.orders) && cloudData.orders.length > 0) {
+          commerceDb.hydrateUserData(cloudData.addresses, cloudData.orders);
+          const reloaded = getStore();
+          matched = (reloaded.orders || []).filter(o => {
+            if (uid && o.user_id && o.user_id === uid) return true;
+            if (email && o.user_email && o.user_email.toLowerCase() === email) return true;
+            return false;
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    return matched;
   },
 
   async getOrderById(id) {
@@ -484,6 +794,15 @@ export const commerceDb = {
     });
 
     saveStore(store);
+
+    // Sync order to cloud for cross-device access
+    if (uid) {
+      import('../cloud/cloudSyncService').then(({ saveUserToCloud }) => {
+        const userOrders = store.orders.filter(o => o.user_id === uid || (o.user_email && o.user_email.toLowerCase() === (email || '').toLowerCase()));
+        saveUserToCloud({ uid, email }, { orders: userOrders });
+      }).catch(() => {});
+    }
+
     return newOrder;
   },
 
@@ -659,6 +978,41 @@ export const commerceDb = {
     return 0;
   },
 
+  // HYDRATE CLOUD DATA
+  hydrateUserData(addresses = [], orders = []) {
+    const store = getStore();
+    let modified = false;
+
+    if (Array.isArray(addresses) && addresses.length > 0) {
+      addresses.forEach(cloudAddr => {
+        const exists = store.addresses.some(a => a.id === cloudAddr.id || (
+          a.pincode === cloudAddr.pincode &&
+          a.address_line === cloudAddr.address_line &&
+          a.user_id === cloudAddr.user_id
+        ));
+        if (!exists) {
+          store.addresses.push(cloudAddr);
+          modified = true;
+        }
+      });
+    }
+
+    if (Array.isArray(orders) && orders.length > 0) {
+      orders.forEach(cloudOrd => {
+        const exists = store.orders.some(o => o.id === cloudOrd.id || o.order_number === cloudOrd.order_number);
+        if (!exists) {
+          store.orders.unshift(cloudOrd);
+          modified = true;
+        }
+      });
+    }
+
+    if (modified) {
+      saveStore(store);
+    }
+    return store;
+  },
+
   // ADDRESSES
   async getAddresses(filterUser = null) {
     const store = getStore();
@@ -669,11 +1023,31 @@ export const commerceDb = {
     }
     const uid = target.uid || target.id;
     const email = (target.email || '').toLowerCase().trim();
-    return (store.addresses || []).filter(a => {
+
+    let matched = (store.addresses || []).filter(a => {
       if (uid && a.user_id && a.user_id === uid) return true;
       if (email && a.user_email && a.user_email.toLowerCase() === email) return true;
       return false;
     });
+
+    // If local store has no addresses for this logged-in user, try live cloud recovery
+    if (matched.length === 0 && uid) {
+      try {
+        const { fetchUserFromCloud } = await import('../cloud/cloudSyncService');
+        const cloudData = await fetchUserFromCloud(uid);
+        if (cloudData && Array.isArray(cloudData.addresses) && cloudData.addresses.length > 0) {
+          commerceDb.hydrateUserData(cloudData.addresses, cloudData.orders);
+          const reloadedStore = getStore();
+          matched = (reloadedStore.addresses || []).filter(a => {
+            if (uid && a.user_id && a.user_id === uid) return true;
+            if (email && a.user_email && a.user_email.toLowerCase() === email) return true;
+            return false;
+          });
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    return matched;
   },
 
   async addAddress(addr, user = null) {
@@ -704,6 +1078,16 @@ export const commerceDb = {
     }
     store.addresses.push(newAddr);
     saveStore(store);
+
+    // Sync user addresses to cloud for multi-device persistence
+    if (uid || target?.uid) {
+      const activeUser = target || { uid, email };
+      import('../cloud/cloudSyncService').then(({ saveUserToCloud }) => {
+        const userAddrs = store.addresses.filter(a => a.user_id === activeUser.uid || (a.user_email && a.user_email.toLowerCase() === (activeUser.email || '').toLowerCase()));
+        saveUserToCloud(activeUser, { addresses: userAddrs });
+      }).catch(() => {});
+    }
+
     return newAddr;
   },
 
@@ -723,6 +1107,14 @@ export const commerceDb = {
       }
       store.addresses[idx] = { ...existingAddr, ...updates };
       saveStore(store);
+
+      if (uid) {
+        import('../cloud/cloudSyncService').then(({ saveUserToCloud }) => {
+          const userAddrs = store.addresses.filter(a => a.user_id === uid || (a.user_email && a.user_email.toLowerCase() === (email || '').toLowerCase()));
+          saveUserToCloud({ uid, email }, { addresses: userAddrs });
+        }).catch(() => {});
+      }
+
       return store.addresses[idx];
     }
     return null;
@@ -730,8 +1122,20 @@ export const commerceDb = {
 
   async deleteAddress(id) {
     const store = getStore();
+    const toDelete = store.addresses.find(a => a.id === id);
     store.addresses = store.addresses.filter(a => a.id !== id);
     saveStore(store);
+
+    const target = getCurrentAuthUser();
+    const uid = toDelete?.user_id || target?.uid;
+    const email = toDelete?.user_email || target?.email;
+    if (uid) {
+      import('../cloud/cloudSyncService').then(({ saveUserToCloud }) => {
+        const userAddrs = store.addresses.filter(a => a.user_id === uid || (a.user_email && a.user_email.toLowerCase() === (email || '').toLowerCase()));
+        saveUserToCloud({ uid, email }, { addresses: userAddrs });
+      }).catch(() => {});
+    }
+
     return true;
   },
 

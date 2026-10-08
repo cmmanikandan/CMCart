@@ -43,7 +43,8 @@ export function EditProfilePage() {
         phone,
         photoURL,
         gender,
-        age: parsedAge
+        age: parsedAge,
+        isProfileCompleted: true
       });
       showToast('Profile updated successfully!', 'success');
       navigate('/profile');

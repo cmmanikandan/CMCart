@@ -85,6 +85,23 @@ export const authService = {
     const isSameUser = existing && (existing.email?.toLowerCase() === emailLower || existing.uid === fbUser.uid);
 
     let customerData = null;
+    let cloudData = null;
+
+    try {
+      const { fetchUserFromCloud } = await import('../cloud/cloudSyncService');
+      cloudData = await fetchUserFromCloud(fbUser.uid, fbUser);
+    } catch (cloudErr) {
+      console.warn('Cloud sync on login error:', cloudErr);
+    }
+
+    // Hydrate local addresses and orders if present in cloud
+    if (cloudData && (cloudData.addresses?.length > 0 || cloudData.orders?.length > 0)) {
+      try {
+        const { commerceDb } = await import('../supabase/supabaseClient');
+        commerceDb.hydrateUserData(cloudData.addresses, cloudData.orders);
+      } catch (hErr) { /* ignore */ }
+    }
+
     try {
       const { supabase } = await import('../supabase/supabaseClient');
       if (supabase && emailLower) {
@@ -102,27 +119,35 @@ export const authService = {
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || '',
-      displayName: (isSameUser ? existing?.displayName : null) || customerData?.full_name || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: (isSameUser ? existing?.photoURL : null) || customerData?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
-      phone: (isSameUser ? existing?.phone : '') || customerData?.phone || fbUser.phoneNumber || '',
-      gender: (isSameUser ? existing?.gender : '') || customerData?.gender || '',
-      age: (isSameUser ? existing?.age : null) || customerData?.age || null,
-      role: isAdminUser ? 'admin' : (isSameUser ? existing?.role : 'customer') || 'customer',
-      isProfileCompleted: isSameUser ? !!existing?.isProfileCompleted : (customerData ? !!customerData.is_profile_completed || !!customerData.gender : false),
+      displayName: cloudData?.displayName || (isSameUser ? existing?.displayName : null) || customerData?.full_name || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || customerData?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      phone: cloudData?.phone || (isSameUser ? existing?.phone : '') || customerData?.phone || fbUser.phoneNumber || '',
+      gender: cloudData?.gender || (isSameUser ? existing?.gender : '') || customerData?.gender || '',
+      age: cloudData?.age || (isSameUser ? existing?.age : null) || customerData?.age || null,
+      role: isAdminUser ? 'admin' : (isSameUser ? existing?.role : cloudData?.role || 'customer') || 'customer',
+      isProfileCompleted: !!cloudData?.isProfileCompleted || (isSameUser ? !!existing?.isProfileCompleted : (customerData ? !!customerData.is_profile_completed || !!customerData.gender : !!cloudData?.gender)),
       isEmailVerified: fbUser.emailVerified ?? true,
       privacy_policy_accepted: consentData.privacy_policy_accepted ?? true,
       terms_accepted: consentData.terms_accepted ?? true,
       privacy_policy_version: consentData.privacy_policy_version ?? '2026.1',
       terms_version: consentData.terms_version ?? '2026.1',
       accepted_at: consentData.accepted_at ?? new Date().toISOString(),
-      created_at: (isSameUser ? existing?.created_at : null) || new Date().toISOString(),
+      created_at: (isSameUser ? existing?.created_at : null) || cloudData?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
     // Store authenticated user in local storage
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(appUser));
 
-    // Upsert customer into Supabase database
+    // Save to cloud asynchronously to ensure multi-device persistence
+    try {
+      const { saveUserToCloud } = await import('../cloud/cloudSyncService');
+      await saveUserToCloud(appUser);
+    } catch (cSaveErr) {
+      console.warn('Save to cloud on login note:', cSaveErr);
+    }
+
+    // Upsert customer into Supabase database if available
     try {
       const { supabase } = await import('../supabase/supabaseClient');
       if (supabase && appUser.email) {
@@ -154,23 +179,39 @@ export const authService = {
     const existing = this.getCurrentUser();
     const isSameUser = existing && (existing.email?.toLowerCase() === emailLower || existing.uid === fbUser.uid);
 
+    let cloudData = null;
+    try {
+      const { fetchUserFromCloud } = await import('../cloud/cloudSyncService');
+      cloudData = await fetchUserFromCloud(fbUser.uid, fbUser);
+    } catch (cloudErr) {
+      console.warn('Cloud sync on auth change note:', cloudErr);
+    }
+
+    // Hydrate local addresses and orders if present in cloud
+    if (cloudData && (cloudData.addresses?.length > 0 || cloudData.orders?.length > 0)) {
+      try {
+        const { commerceDb } = await import('../supabase/supabaseClient');
+        commerceDb.hydrateUserData(cloudData.addresses, cloudData.orders);
+      } catch (hErr) { /* ignore */ }
+    }
+
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || existing?.email || '',
-      displayName: (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: (isSameUser ? existing?.photoURL : null) || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
-      phone: (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
-      gender: (isSameUser ? existing?.gender : '') || '',
-      age: (isSameUser ? existing?.age : null) || null,
-      isProfileCompleted: isSameUser ? !!existing?.isProfileCompleted : false,
-      role: isAdminUser ? 'admin' : (existing?.role || 'customer'),
+      displayName: cloudData?.displayName || (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      phone: cloudData?.phone || (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
+      gender: cloudData?.gender || (isSameUser ? existing?.gender : '') || '',
+      age: cloudData?.age || (isSameUser ? existing?.age : null) || null,
+      isProfileCompleted: !!cloudData?.isProfileCompleted || (isSameUser && !!existing?.isProfileCompleted) || !!cloudData?.gender,
+      role: isAdminUser ? 'admin' : (isSameUser ? existing?.role : cloudData?.role || 'customer'),
       isEmailVerified: fbUser.emailVerified ?? true,
       privacy_policy_accepted: existing?.privacy_policy_accepted ?? true,
       terms_accepted: existing?.terms_accepted ?? true,
       privacy_policy_version: existing?.privacy_policy_version ?? '2026.1',
       terms_version: existing?.terms_version ?? '2026.1',
       accepted_at: existing?.accepted_at ?? new Date().toISOString(),
-      created_at: existing?.created_at ?? new Date().toISOString(),
+      created_at: existing?.created_at || cloudData?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
@@ -250,6 +291,14 @@ export const authService = {
     if (!current) return null;
     const updated = { ...current, ...updates, updated_at: new Date().toISOString() };
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
+
+    // Sync to Cloudinary cloud & Firebase Auth for cross-device persistence
+    try {
+      const { saveUserToCloud } = await import('../cloud/cloudSyncService');
+      await saveUserToCloud(updated);
+    } catch (cErr) {
+      console.warn('Profile cloud sync note:', cErr);
+    }
 
     // Also sync to Supabase if customer
     try {

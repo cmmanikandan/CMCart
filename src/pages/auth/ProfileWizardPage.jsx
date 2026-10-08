@@ -182,7 +182,7 @@ export function ProfileWizardPage() {
       const fullPhone = `+91 ${mobileNumber.replace(/\D/g, '')}`;
 
       // 1. Save Address to database scoped to current user
-      await commerceDb.addAddress({
+      const savedAddr = await commerceDb.addAddress({
         user_id: user?.uid || null,
         user_email: user?.email || null,
         full_name: receiverName.trim() || fullName.trim(),
@@ -196,7 +196,7 @@ export function ProfileWizardPage() {
       }, user);
 
       // 2. Update user profile with DP, name, mobile with +91, gender, age
-      await updateProfile({
+      const updatedUser = await updateProfile({
         displayName: fullName.trim(),
         photoURL: avatarUrl,
         phone: fullPhone,
@@ -204,6 +204,14 @@ export function ProfileWizardPage() {
         age: parseInt(age, 10) || null,
         isProfileCompleted: true
       });
+
+      // 3. Guarantee immediate multi-device cloud persistence
+      try {
+        const { saveUserToCloud } = await import('../../services/cloud/cloudSyncService');
+        await saveUserToCloud(updatedUser, { addresses: [savedAddr] });
+      } catch (cErr) {
+        console.warn('Profile wizard cloud sync note:', cErr);
+      }
 
       showToast('Profile and delivery address saved successfully!', 'success');
       setStep(3); // Go to success screen
