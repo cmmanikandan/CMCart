@@ -512,49 +512,55 @@ export const commerceDb = {
   // CATEGORIES
   async getCategories() {
     let store = getStore();
-    if (store.categories.length === 0 && !hasSyncedCatalog) {
-      await syncCatalogFromCloud();
-      store = getStore();
-    }
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        const { data: dbCats } = await supabase.from('categories').select('*').order('display_order', { ascending: true });
+        if (Array.isArray(dbCats) && dbCats.length > 0) {
+          store.categories = dbCats;
+          saveStore(store);
+          return dbCats;
+        }
+      }
+    } catch (e) { /* ignore */ }
     return store.categories;
   },
 
   async addCategory(cat) {
     const store = getStore();
-    const cleanId = (cat.id && cat.id.length === 36)
-      ? cat.id
-      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cat-${Date.now()}`);
+    let createdCat = null;
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        const { data } = await supabase.from('categories').insert([{
+          name: cat.name,
+          slug: (cat.slug || cat.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          description: cat.description || null,
+          icon: cat.icon || null,
+          image_url: cat.image_url || null,
+          is_active: cat.is_active ?? true,
+          updated_at: new Date().toISOString()
+        }]).select().maybeSingle();
+        createdCat = data;
+      }
+    } catch (e) { /* ignore */ }
 
-    const newCat = {
-      id: cleanId,
+    const newCat = createdCat || {
+      id: `cat-${Date.now()}`,
       slug: (cat.slug || cat.name).toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       itemCount: 0,
       is_active: true,
-      ...cat,
-      id: cleanId
+      ...cat
     };
-    store.categories.push(newCat);
-    saveStore(store);
+
+    const exists = store.categories.some(c => c.id === newCat.id);
+    if (!exists) {
+      store.categories.push(newCat);
+      saveStore(store);
+    }
 
     import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
       saveCatalogToCloud(store);
-    }).catch(() => {});
-
-    import('./supabaseInit').then(({ supabase }) => {
-      if (supabase) {
-        supabase.from('categories').insert([{
-          id: newCat.id,
-          name: newCat.name,
-          slug: newCat.slug,
-          description: newCat.description || null,
-          icon: newCat.icon || null,
-          image_url: newCat.image_url || null,
-          is_active: newCat.is_active,
-          updated_at: new Date().toISOString()
-        }]).then(({ error }) => {
-          if (error) console.warn('Supabase category insert note:', error.message);
-        });
-      }
     }).catch(() => {});
 
     return newCat;
@@ -566,25 +572,28 @@ export const commerceDb = {
     if (idx !== -1) {
       store.categories[idx] = { ...store.categories[idx], ...updates };
       saveStore(store);
-
-      import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
-        saveCatalogToCloud(store);
-      }).catch(() => {});
-
-      import('./supabaseInit').then(({ supabase }) => {
-        if (supabase) {
-          supabase.from('categories').update({
-            ...updates,
-            updated_at: new Date().toISOString()
-          }).eq('id', id).then(({ error }) => {
-            if (error) console.warn('Supabase category update note:', error.message);
-          });
-        }
-      }).catch(() => {});
-
-      return store.categories[idx];
     }
-    return null;
+
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        await supabase.from('categories').update({
+          name: updates.name,
+          slug: updates.slug,
+          description: updates.description || null,
+          icon: updates.icon || null,
+          image_url: updates.image_url || null,
+          is_active: updates.is_active ?? true,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+      }
+    } catch (e) { /* ignore */ }
+
+    import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
+      saveCatalogToCloud(store);
+    }).catch(() => {});
+
+    return store.categories[idx] || updates;
   },
 
   async deleteCategory(id) {
@@ -592,16 +601,15 @@ export const commerceDb = {
     store.categories = store.categories.filter(c => c.id !== id);
     saveStore(store);
 
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        await supabase.from('categories').delete().eq('id', id);
+      }
+    } catch (e) { /* ignore */ }
+
     import('../cloud/cloudSyncService').then(({ saveCatalogToCloud }) => {
       saveCatalogToCloud(store);
-    }).catch(() => {});
-
-    import('./supabaseInit').then(({ supabase }) => {
-      if (supabase) {
-        supabase.from('categories').delete().eq('id', id).then(({ error }) => {
-          if (error) console.warn('Supabase category delete note:', error.message);
-        });
-      }
     }).catch(() => {});
 
     return true;
@@ -693,16 +701,49 @@ export const commerceDb = {
   // ORDERS
   async getOrders(filterUser = null) {
     const store = getStore();
-    if (filterUser === 'all' || filterUser?.all === true) {
-      return store.orders || [];
-    }
     const target = filterUser || getCurrentAuthUser();
-    if (!target) return [];
-    if ((target.role === 'admin' || isStoreAdmin(target)) && !filterUser) {
+    const uid = target?.uid || target?.id;
+    const email = (target?.email || '').toLowerCase().trim();
+
+    // Fetch live orders directly from Supabase PostgreSQL
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        const { data: dbOrders } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .order('created_at', { ascending: false });
+
+        if (Array.isArray(dbOrders) && dbOrders.length > 0) {
+          dbOrders.forEach(dbo => {
+            const exists = store.orders.some(o => o.id === dbo.id || o.order_number === dbo.order_number);
+            const transformed = {
+              ...dbo,
+              items: Array.isArray(dbo.order_items) ? dbo.order_items.map(i => ({
+                id: i.id,
+                name: i.product_name,
+                product_name: i.product_name,
+                image: i.product_image,
+                unit_price: Number(i.unit_price),
+                quantity: Number(i.quantity),
+                total: Number(i.total_price),
+                selected_options: i.selected_options
+              })) : (dbo.items || [])
+            };
+            if (!exists) {
+              store.orders.unshift(transformed);
+            }
+          });
+          saveStore(store);
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    if (filterUser === 'all' || filterUser?.all === true || ((target?.role === 'admin' || isStoreAdmin(target)) && !filterUser)) {
       return store.orders || [];
     }
-    const uid = target.uid || target.id;
-    const email = (target.email || '').toLowerCase().trim();
+
+    if (!target) return [];
 
     let matched = (store.orders || []).filter(o => {
       if (uid && o.user_id && o.user_id === uid) return true;
@@ -795,7 +836,50 @@ export const commerceDb = {
 
     saveStore(store);
 
-    // Sync order to cloud for cross-device access
+    // 1. Insert directly into Supabase PostgreSQL orders and order_items tables
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        const { data: dbOrder, error: oErr } = await supabase.from('orders').insert([{
+          order_number: newOrder.order_number,
+          total_amount: Number(newOrder.total_amount || 0),
+          subtotal: Number(newOrder.subtotal || newOrder.total_amount || 0),
+          status: newOrder.status || 'Confirmed',
+          payment_method: newOrder.payment_method || 'Cash on Delivery',
+          payment_status: newOrder.payment_status || 'Pending',
+          shipping_address: newOrder.shipping_address || {},
+          timeline: newOrder.timeline || [],
+          carrier: newOrder.carrier || 'CMCart Express Logistics',
+          tracking_number: newOrder.tracking_number || null,
+          estimated_delivery: newOrder.estimated_delivery || 'In 2-3 business days',
+          is_paid: !!newOrder.is_paid,
+          cod_collected: !!newOrder.cod_collected,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]).select().maybeSingle();
+
+        if (oErr) {
+          console.warn('Supabase live order insert note:', oErr.message);
+        }
+
+        if (dbOrder && Array.isArray(newOrder.items) && newOrder.items.length > 0) {
+          const itemsPayload = newOrder.items.map(it => ({
+            order_id: dbOrder.id,
+            product_name: it.product_name_snapshot || it.name || 'Product',
+            product_image: it.image || null,
+            unit_price: Number(it.unit_price || 0),
+            quantity: Number(it.quantity || 1),
+            total_price: Number(it.unit_price || 0) * Number(it.quantity || 1),
+            selected_options: it.selected_options || {}
+          }));
+          await supabase.from('order_items').insert(itemsPayload);
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Supabase live order insert error:', dbErr?.message);
+    }
+
+    // 2. Sync order to cloud for cross-device access
     if (uid) {
       import('../cloud/cloudSyncService').then(({ saveUserToCloud }) => {
         const userOrders = store.orders.filter(o => o.user_id === uid || (o.user_email && o.user_email.toLowerCase() === (email || '').toLowerCase()));

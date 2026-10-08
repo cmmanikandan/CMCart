@@ -84,7 +84,7 @@ export const authService = {
     const existing = this.getCurrentUser();
     const isSameUser = existing && (existing.email?.toLowerCase() === emailLower || existing.uid === fbUser.uid);
 
-    let customerData = null;
+    let dbProfile = null;
     let cloudData = null;
 
     try {
@@ -102,37 +102,47 @@ export const authService = {
       } catch (hErr) { /* ignore */ }
     }
 
+    // Fetch live profile from Supabase PostgreSQL profiles table
     try {
-      const { supabase } = await import('../supabase/supabaseClient');
+      const { supabase } = await import('../supabase/supabaseInit');
       if (supabase && emailLower) {
         const { data } = await supabase
-          .from('customers')
+          .from('profiles')
           .select('*')
           .eq('email', emailLower)
           .maybeSingle();
-        customerData = data;
+        dbProfile = data;
       }
     } catch (e) {
       // offline/fallback
     }
 
+    // Extract embedded metadata from avatar_url if present
+    let dbMeta = null;
+    if (dbProfile?.avatar_url) {
+      try {
+        const { parseProfileHash } = await import('../cloud/cloudSyncService');
+        dbMeta = parseProfileHash(dbProfile.avatar_url).meta;
+      } catch (e) { /* ignore */ }
+    }
+
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || '',
-      displayName: cloudData?.displayName || (isSameUser ? existing?.displayName : null) || customerData?.full_name || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || customerData?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
-      phone: cloudData?.phone || (isSameUser ? existing?.phone : '') || customerData?.phone || fbUser.phoneNumber || '',
-      gender: cloudData?.gender || (isSameUser ? existing?.gender : '') || customerData?.gender || '',
-      age: cloudData?.age || (isSameUser ? existing?.age : null) || customerData?.age || null,
-      role: isAdminUser ? 'admin' : (isSameUser ? existing?.role : cloudData?.role || 'customer') || 'customer',
-      isProfileCompleted: !!cloudData?.isProfileCompleted || (isSameUser ? !!existing?.isProfileCompleted : (customerData ? !!customerData.is_profile_completed || !!customerData.gender : !!cloudData?.gender)),
+      displayName: dbProfile?.full_name || cloudData?.displayName || (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || dbProfile?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      phone: dbProfile?.phone || cloudData?.phone || (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
+      gender: dbMeta?.g || cloudData?.gender || (isSameUser ? existing?.gender : '') || '',
+      age: dbMeta?.a || cloudData?.age || (isSameUser ? existing?.age : null) || null,
+      role: isAdminUser ? 'admin' : (dbProfile?.role || (isSameUser ? existing?.role : cloudData?.role || 'customer') || 'customer'),
+      isProfileCompleted: !!(dbMeta?.c || cloudData?.isProfileCompleted || (isSameUser ? existing?.isProfileCompleted : false) || dbMeta?.g || cloudData?.gender),
       isEmailVerified: fbUser.emailVerified ?? true,
       privacy_policy_accepted: consentData.privacy_policy_accepted ?? true,
       terms_accepted: consentData.terms_accepted ?? true,
       privacy_policy_version: consentData.privacy_policy_version ?? '2026.1',
       terms_version: consentData.terms_version ?? '2026.1',
       accepted_at: consentData.accepted_at ?? new Date().toISOString(),
-      created_at: (isSameUser ? existing?.created_at : null) || cloudData?.created_at || new Date().toISOString(),
+      created_at: dbProfile?.created_at || (isSameUser ? existing?.created_at : null) || cloudData?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
@@ -147,25 +157,30 @@ export const authService = {
       console.warn('Save to cloud on login note:', cSaveErr);
     }
 
-    // Upsert customer into Supabase database if available
+    // Upsert customer into Supabase PostgreSQL profiles table
     try {
-      const { supabase } = await import('../supabase/supabaseClient');
+      const { supabase } = await import('../supabase/supabaseInit');
       if (supabase && appUser.email) {
-        await supabase.from('customers').upsert({
-          auth_id: appUser.uid,
+        const { buildProfileHash } = await import('../cloud/cloudSyncService');
+        const enrichedAvatar = buildProfileHash(appUser.photoURL, {
+          gender: appUser.gender,
+          age: appUser.age,
+          phone: appUser.phone,
+          isProfileCompleted: appUser.isProfileCompleted
+        });
+
+        await supabase.from('profiles').upsert({
+          auth_uid: appUser.uid,
           email: appUser.email,
           full_name: appUser.displayName,
           phone: appUser.phone || null,
-          avatar_url: appUser.photoURL || null,
-          gender: appUser.gender || null,
-          age: appUser.age || null,
-          is_profile_completed: appUser.isProfileCompleted,
-          status: 'active',
+          avatar_url: enrichedAvatar,
+          role: appUser.role,
           updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
       }
     } catch (dbErr) {
-      console.warn('Supabase customer profile sync note:', dbErr?.message);
+      console.warn('Supabase profile sync note:', dbErr?.message);
     }
 
     return appUser;
@@ -195,23 +210,45 @@ export const authService = {
       } catch (hErr) { /* ignore */ }
     }
 
+    // Fetch live profile from Supabase PostgreSQL profiles table
+    let dbProfile = null;
+    try {
+      const { supabase } = await import('../supabase/supabaseInit');
+      if (supabase && emailLower) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', emailLower)
+          .maybeSingle();
+        dbProfile = data;
+      }
+    } catch (e) { /* ignore */ }
+
+    let dbMeta = null;
+    if (dbProfile?.avatar_url) {
+      try {
+        const { parseProfileHash } = await import('../cloud/cloudSyncService');
+        dbMeta = parseProfileHash(dbProfile.avatar_url).meta;
+      } catch (e) { /* ignore */ }
+    }
+
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || existing?.email || '',
-      displayName: cloudData?.displayName || (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
-      phone: cloudData?.phone || (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
-      gender: cloudData?.gender || (isSameUser ? existing?.gender : '') || '',
-      age: cloudData?.age || (isSameUser ? existing?.age : null) || null,
-      isProfileCompleted: !!cloudData?.isProfileCompleted || (isSameUser && !!existing?.isProfileCompleted) || !!cloudData?.gender,
-      role: isAdminUser ? 'admin' : (isSameUser ? existing?.role : cloudData?.role || 'customer'),
+      displayName: dbProfile?.full_name || cloudData?.displayName || (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || dbProfile?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      phone: dbProfile?.phone || cloudData?.phone || (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
+      gender: dbMeta?.g || cloudData?.gender || (isSameUser ? existing?.gender : '') || '',
+      age: dbMeta?.a || cloudData?.age || (isSameUser ? existing?.age : null) || null,
+      isProfileCompleted: !!(dbMeta?.c || cloudData?.isProfileCompleted || (isSameUser ? existing?.isProfileCompleted : false) || dbMeta?.g || cloudData?.gender),
+      role: isAdminUser ? 'admin' : (dbProfile?.role || (isSameUser ? existing?.role : cloudData?.role || 'customer') || 'customer'),
       isEmailVerified: fbUser.emailVerified ?? true,
       privacy_policy_accepted: existing?.privacy_policy_accepted ?? true,
       terms_accepted: existing?.terms_accepted ?? true,
       privacy_policy_version: existing?.privacy_policy_version ?? '2026.1',
       terms_version: existing?.terms_version ?? '2026.1',
       accepted_at: existing?.accepted_at ?? new Date().toISOString(),
-      created_at: existing?.created_at || cloudData?.created_at || new Date().toISOString(),
+      created_at: dbProfile?.created_at || existing?.created_at || cloudData?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
@@ -300,19 +337,25 @@ export const authService = {
       console.warn('Profile cloud sync note:', cErr);
     }
 
-    // Also sync to Supabase if customer
+    // Upsert into Supabase PostgreSQL profiles table
     try {
-      const { supabase } = await import('../supabase/supabaseClient');
+      const { supabase } = await import('../supabase/supabaseInit');
       if (supabase && updated.email) {
-        await supabase.from('customers').upsert({
-          auth_id: updated.uid,
+        const { buildProfileHash } = await import('../cloud/cloudSyncService');
+        const enrichedAvatar = buildProfileHash(updated.photoURL, {
+          gender: updated.gender,
+          age: updated.age,
+          phone: updated.phone,
+          isProfileCompleted: updated.isProfileCompleted
+        });
+
+        await supabase.from('profiles').upsert({
+          auth_uid: updated.uid,
           email: updated.email,
           full_name: updated.displayName,
           phone: updated.phone || null,
-          avatar_url: updated.photoURL || null,
-          gender: updated.gender || null,
-          age: updated.age || null,
-          is_profile_completed: !!updated.isProfileCompleted,
+          avatar_url: enrichedAvatar,
+          role: updated.role || 'customer',
           updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
       }
