@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Filter, Eye, CheckCircle2, Truck, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Search, Filter, Eye, CheckCircle2, Truck, RefreshCw, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
+import { PaymentStatusBadge } from '../../components/ui/PaymentStatusBadge';
 import { commerceDb } from '../../services/supabase/supabaseClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -11,6 +13,7 @@ export function AdminOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   const validStatuses = [
@@ -26,27 +29,55 @@ export function AdminOrdersPage() {
 
   useEffect(() => {
     loadOrders();
+    const handleUpdate = () => loadOrders();
+    window.addEventListener('cmcart_dataset_updated', handleUpdate);
+    return () => window.removeEventListener('cmcart_dataset_updated', handleUpdate);
   }, []);
 
-  const loadOrders = () => {
-    commerceDb.getOrders().then(setOrders);
-  };
-
-  const handleUpdateStatus = async (orderId, newStatus) => {
-    await commerceDb.updateOrderStatus(orderId, newStatus);
-    showToast(`Order status updated to "${newStatus}"!`, 'success');
-    loadOrders();
-    if (selectedOrder && selectedOrder.id === orderId) {
-      const updated = await commerceDb.getOrderById(orderId);
-      setSelectedOrder(updated);
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const res = await commerceDb.getOrders();
+      setOrders(Array.isArray(res) ? res : []);
+    } catch (err) {
+      console.error('Failed to load orders', err);
+      setOrders([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const filtered = orders.filter((o) => {
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    if (!orderId) return;
+    try {
+      await commerceDb.updateOrderStatus(orderId, newStatus);
+      showToast(`Order status updated to "${newStatus}"!`, 'success');
+      await loadOrders();
+      if (selectedOrder && selectedOrder.id === orderId) {
+        const updated = await commerceDb.getOrderById(orderId);
+        setSelectedOrder(updated);
+      }
+    } catch (err) {
+      console.error('Error updating status', err);
+      showToast('Failed to update status', 'error');
+    }
+  };
+
+  const filtered = (orders || []).filter((o) => {
+    if (!o) return false;
+    const orderNum = String(o.order_number || o.id || '').toLowerCase();
+    const customerName = String(o.shipping_address?.full_name || '').toLowerCase();
+    const searchLower = String(search || '').toLowerCase().trim();
+
     const matchesSearch =
-      o.order_number.toLowerCase().includes(search.toLowerCase()) ||
-      o.shipping_address?.full_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || o.status === statusFilter;
+      !searchLower ||
+      orderNum.includes(searchLower) ||
+      customerName.includes(searchLower);
+
+    const matchesStatus =
+      statusFilter === 'All' ||
+      String(o.status || '').toLowerCase() === statusFilter.toLowerCase();
+
     return matchesSearch && matchesStatus;
   });
 
@@ -88,7 +119,7 @@ export function AdminOrdersPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-neutral-100 dark:bg-neutral-800 border-none rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-1 focus:ring-[#E63946]"
+            className="bg-neutral-100 dark:bg-neutral-800 border-none rounded-xl px-3 py-1.5 text-xs font-semibold focus:ring-1 focus:ring-[#E63946] cursor-pointer"
           >
             <option value="All">All Statuses</option>
             {validStatuses.map((s) => (
@@ -110,54 +141,132 @@ export function AdminOrdersPage() {
                 <th className="py-3 px-4">Items</th>
                 <th className="py-3 px-4">Total</th>
                 <th className="py-3 px-4">Payment</th>
-                <th className="py-3 px-4">Status & Quick Update</th>
-                <th className="py-3 px-4 text-right">View</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-              {filtered.map((ord) => (
-                <tr key={ord.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
-                  <td className="py-3 px-4 font-bold text-neutral-900 dark:text-neutral-100">
-                    {ord.order_number}
-                  </td>
-                  <td className="py-3 px-4">
-                    <p className="font-semibold">{ord.shipping_address?.full_name || 'Customer'}</p>
-                    <p className="text-[11px] text-neutral-400">{ord.shipping_address?.city}</p>
-                  </td>
-                  <td className="py-3 px-4 text-neutral-500 whitespace-nowrap">
-                    {new Date(ord.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </td>
-                  <td className="py-3 px-4 font-semibold">
-                    {ord.items?.length || 1} item(s)
-                  </td>
-                  <td className="py-3 px-4 font-bold text-neutral-900 dark:text-neutral-100">
-                    ₹{ord.total_amount?.toLocaleString('en-IN')}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="font-medium text-xs">{ord.payment_method}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    {/* Status Dropdown Controller (Updates in real-time) */}
-                    <select
-                      value={ord.status}
-                      onChange={(e) => handleUpdateStatus(ord.id, e.target.value)}
-                      className="bg-neutral-100 dark:bg-neutral-800 border-none rounded-lg px-2.5 py-1 text-xs font-bold text-neutral-800 dark:text-neutral-200 focus:ring-1 focus:ring-[#E63946] cursor-pointer"
-                    >
-                      {validStatuses.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => setSelectedOrder(ord)}
-                      className="p-1.5 text-neutral-600 hover:text-[#E63946] dark:text-neutral-300"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-xs text-neutral-400">
+                    Loading order list...
                   </td>
                 </tr>
-              ))}
+              ) : orders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center">
+                    <div className="max-w-xs mx-auto text-center space-y-2">
+                      <ShoppingCart className="w-8 h-8 text-neutral-400 mx-auto" />
+                      <p className="font-bold text-sm text-neutral-800 dark:text-neutral-200">No Orders in Store</p>
+                      <p className="text-xs text-neutral-500">Your order ledger is currently empty. Incoming customer checkouts or uploaded dataset orders will appear here.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-xs text-neutral-400">
+                    No orders match your filter criteria.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((ord) => {
+                  if (!ord) return null;
+                  const displayDate = ord.date
+                    ? new Date(ord.date).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })
+                    : 'Recent';
+
+                  return (
+                    <tr key={ord.id || Math.random()} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30">
+                      <td className="py-3 px-4 font-bold">
+                        <Link
+                          to={`/admin/orders/${ord.id}`}
+                          className="text-neutral-900 dark:text-neutral-100 hover:text-[#E63946] transition-colors"
+                        >
+                          {ord.order_number || ord.id || 'Order'}
+                        </Link>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 overflow-hidden shrink-0 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-neutral-300">
+                            <img
+                              src={ord.customer_photo || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(ord.shipping_address?.full_name || 'Customer')}`}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                              {ord.shipping_address?.full_name || 'Customer'}
+                            </p>
+                            <p className="text-[11px] text-neutral-400 truncate">
+                              {ord.shipping_address?.city || ord.shipping_address?.phone || ''}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-neutral-500 whitespace-nowrap">
+                        {displayDate}
+                      </td>
+                      <td className="py-3 px-4 font-semibold">
+                        {ord.items?.length || 1} item(s)
+                      </td>
+                      <td className="py-3 px-4 font-bold text-neutral-900 dark:text-neutral-100">
+                        ₹{(ord.total_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col gap-1 items-start">
+                          <PaymentStatusBadge
+                            status={ord.payment_status === 'Completed' || ord.cod_collected || !ord.payment_method?.toLowerCase().includes('cash') ? 'PAID' : 'UNPAID'}
+                            method={ord.payment_method}
+                            size="xs"
+                          />
+                          <span className="text-[11px] text-neutral-500 truncate max-w-[120px]">
+                            {ord.payment_method || 'Online Payment'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Link to={`/admin/orders/${ord.id}`}>
+                          <Badge
+                            variant={
+                              ord.status === 'Delivered'
+                                ? 'success'
+                                : ord.status === 'Cancelled'
+                                ? 'danger'
+                                : 'primary'
+                            }
+                            size="sm"
+                          >
+                            {ord.status || 'Confirmed'}
+                          </Badge>
+                        </Link>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            to={`/admin/orders/${ord.id}`}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#E63946] text-white hover:bg-[#d62839] transition-colors shadow-xs"
+                          >
+                            Manage
+                          </Link>
+                          <Link
+                            to={`/order/${ord.id}/invoice?from=admin`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors border border-neutral-200 dark:border-neutral-700"
+                            title="View and Print Official Tax Invoice"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Invoice</span>
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -197,7 +306,7 @@ export function AdminOrdersPage() {
                         <p className="text-[11px] text-neutral-400">Qty: {it.quantity} {it.variant ? `• ${it.variant}` : ''}</p>
                       </div>
                     </div>
-                    <span className="font-bold">₹{(it.total || it.unit_price * it.quantity).toLocaleString('en-IN')}</span>
+                    <span className="font-bold">₹{((it.total || (it.unit_price || 0) * (it.quantity || 1))).toLocaleString('en-IN')}</span>
                   </div>
                 ))}
               </div>

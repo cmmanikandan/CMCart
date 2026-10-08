@@ -19,6 +19,12 @@ import { getOptimizedImageUrl } from '../../services/cloudinary/cloudinaryServic
 export function CartPage() {
   const {
     cartItems,
+    selectedItemIds,
+    selectedCartItems,
+    toggleSelectItem,
+    selectAllItems,
+    deselectAllItems,
+    selectedCount,
     savedForLater,
     updateQuantity,
     removeFromCart,
@@ -39,6 +45,16 @@ export function CartPage() {
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const navigate = useNavigate();
+
+  const isAllSelected = cartItems.length > 0 && selectedItemIds.length === cartItems.length;
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      deselectAllItems();
+    } else {
+      selectAllItems();
+    }
+  };
 
   const handleApplyCoupon = async (e) => {
     e.preventDefault();
@@ -110,32 +126,64 @@ export function CartPage() {
 
   return (
     <div className="space-y-6 pb-24 md:pb-10">
-      <div className="bg-white dark:bg-[#181818] p-4 sm:p-6 rounded-2xl border border-neutral-200/80 dark:border-neutral-800">
-        <h1 className="text-xl sm:text-2xl font-black text-neutral-900 dark:text-neutral-100">
-          Shopping Cart ({cartItems.length} items)
-        </h1>
-        {deliveryFee === 0 && (
-          <p className="text-xs text-[#16A34A] font-semibold mt-1 flex items-center gap-1">
-            <Truck className="w-3.5 h-3.5" />
-            Your order qualifies for FREE Express Delivery!
-          </p>
-        )}
+      <div className="bg-white dark:bg-[#181818] p-4 sm:p-6 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-neutral-900 dark:text-neutral-100">
+            Shopping Cart ({cartItems.length} items)
+          </h1>
+          {deliveryFee === 0 && (
+            <p className="text-xs text-[#16A34A] font-semibold mt-1 flex items-center gap-1">
+              <Truck className="w-3.5 h-3.5" />
+              Your order qualifies for FREE Express Delivery!
+            </p>
+          )}
+        </div>
+
+        {/* Select All Bar */}
+        <div className="flex items-center gap-2.5 bg-neutral-50 dark:bg-neutral-800/60 px-3.5 py-2 rounded-xl border border-neutral-200/60 dark:border-neutral-700/60">
+          <input
+            type="checkbox"
+            id="cart-select-all"
+            checked={isAllSelected}
+            onChange={handleToggleSelectAll}
+            className="w-4 h-4 rounded text-[#E63946] focus:ring-[#E63946] accent-[#E63946] cursor-pointer"
+          />
+          <label htmlFor="cart-select-all" className="text-xs font-bold text-neutral-700 dark:text-neutral-300 cursor-pointer select-none">
+            Select All ({selectedItemIds.length}/{cartItems.length} for checkout)
+          </label>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Cart Items List (8 cols) */}
         <div className="lg:col-span-8 space-y-4">
           <div className="bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 divide-y divide-neutral-100 dark:divide-neutral-800/80 p-4 sm:p-6">
-            {cartItems.map((item) => (
-              <div key={item.id} className="py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row gap-4">
-                {/* Item Image */}
-                <Link to={`/product/${item.productId}`} className="shrink-0">
-                  <img
-                    src={getOptimizedImageUrl(item.image, { width: 160 })}
-                    alt={item.name}
-                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700"
-                  />
-                </Link>
+            {cartItems.map((item) => {
+              const isSelected = selectedItemIds.includes(item.id);
+              return (
+                <div
+                  key={item.id}
+                  className={`py-4 first:pt-0 last:pb-0 flex flex-col sm:flex-row gap-4 transition-opacity ${
+                    isSelected ? 'opacity-100' : 'opacity-60 bg-neutral-50/50 dark:bg-neutral-800/20 -mx-2 px-2 rounded-xl'
+                  }`}
+                >
+                  {/* Select Checkbox & Item Image */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelectItem(item.id)}
+                      aria-label={`Select ${item.name}`}
+                      className="w-4 h-4 rounded text-[#E63946] focus:ring-[#E63946] accent-[#E63946] cursor-pointer shrink-0"
+                    />
+                    <Link to={`/product/${item.productId}`} className="shrink-0">
+                      <img
+                        src={getOptimizedImageUrl(item.image, { width: 160 })}
+                        alt={item.name}
+                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700"
+                      />
+                    </Link>
+                  </div>
 
                 {/* Info & Quantity controls */}
                 <div className="flex-1 min-w-0 flex flex-col justify-between">
@@ -203,8 +251,9 @@ export function CartPage() {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
           {/* Saved For Later items */}
           {savedForLater && savedForLater.length > 0 && (
@@ -367,12 +416,21 @@ export function CartPage() {
               onClick={() => navigate('/checkout')}
               variant="primary"
               size="lg"
+              disabled={selectedCount === 0}
               className="w-full mt-4"
               icon={ArrowRight}
               iconPosition="right"
             >
-              Proceed to Checkout
+              {selectedCount === 0
+                ? 'Select items to checkout'
+                : `Proceed to Checkout (${selectedCount} ${selectedCount === 1 ? 'item' : 'items'})`}
             </Button>
+
+            {selectedCount === 0 && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center font-medium">
+                Please check at least one product above to checkout.
+              </p>
+            )}
 
             <div className="flex items-center justify-center gap-2 text-xs text-neutral-400 pt-2">
               <ShieldCheck className="w-4 h-4 text-[#16A34A]" />
@@ -385,7 +443,9 @@ export function CartPage() {
       {/* Sticky Mobile Checkout Bar */}
       <div className="md:hidden fixed bottom-14 left-0 right-0 z-30 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border-t border-neutral-200 dark:border-neutral-800 p-3 flex items-center justify-between shadow-lg">
         <div>
-          <span className="text-[10px] text-neutral-400 uppercase font-bold block">Total Amount</span>
+          <span className="text-[10px] text-neutral-400 uppercase font-bold block">
+            Payable ({selectedCount} items)
+          </span>
           <span className="text-base font-black text-neutral-900 dark:text-neutral-100">
             ₹{totalAmount.toLocaleString('en-IN')}
           </span>
@@ -394,10 +454,11 @@ export function CartPage() {
           onClick={() => navigate('/checkout')}
           variant="primary"
           size="md"
+          disabled={selectedCount === 0}
           icon={ArrowRight}
           iconPosition="right"
         >
-          Checkout
+          Checkout ({selectedCount})
         </Button>
       </div>
     </div>

@@ -142,6 +142,13 @@ export function SearchBar({
                   <ArrowRight className="w-3.5 h-3.5 text-neutral-400" />
                 </div>
               ))}
+              <button
+                onClick={() => handleSearchSubmit()}
+                className="w-full mt-1 py-2 px-3 bg-neutral-50 dark:bg-neutral-800/60 hover:bg-[#E63946]/10 text-[#E63946] text-xs font-bold rounded-lg text-center flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>View all search results</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 

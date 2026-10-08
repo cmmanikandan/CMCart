@@ -20,11 +20,15 @@ export function BrandLogo({ size = 'md', to = '/', showText = true, className = 
       <img
         src="/logo.png"
         alt="CMCart Logo Icon"
-        className={`${iconSizes[size] || iconSizes.md} object-contain transition-transform group-hover:scale-105`}
+        className={`${iconSizes[size] || iconSizes.md} object-contain transition-transform duration-200 group-hover:scale-105 drop-shadow-xs`}
       />
       {showText && (
-        <span className={`font-black tracking-tight ${textSizes[size] || textSizes.md} text-neutral-900 dark:text-white`}>
-          CM<span className="text-[#E63946]">Cart</span>
+        <span
+          style={{ fontFamily: "'Outfit', 'Plus Jakarta Sans', sans-serif" }}
+          className={`font-black tracking-tight ${textSizes[size] || textSizes.md} flex items-center leading-none text-neutral-900 dark:text-white`}
+        >
+          <span className="tracking-tight">CM</span>
+          <span className="text-[#E63946] tracking-tight ml-0.5">Cart</span>
         </span>
       )}
     </div>

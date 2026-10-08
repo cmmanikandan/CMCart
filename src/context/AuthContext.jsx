@@ -31,10 +31,10 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (consentData) => {
     setLoading(true);
     try {
-      const u = await authService.loginWithGoogle();
+      const u = await authService.loginWithGoogle(consentData);
       setUser(u);
       return u;
     } finally {

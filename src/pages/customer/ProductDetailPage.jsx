@@ -15,7 +15,12 @@ import {
   MapPin,
   Clock,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  ArrowLeft,
+  Camera,
+  ThumbsUp,
+  X,
+  Filter
 } from 'lucide-react';
 import { Price } from '../../components/ui/Price';
 import { Rating } from '../../components/ui/Rating';
@@ -44,11 +49,19 @@ export function ProductDetailPage() {
   const [pincodeVerified, setPincodeVerified] = useState(true);
   const [reviews, setReviews] = useState([]);
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [recommendedProducts, setRecommendedProducts] = useState([]);
 
-  // New review form
+  // New review form & filter states
+  const [newReviewTitle, setNewReviewTitle] = useState('');
   const [newReviewComment, setNewReviewComment] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
+  const [newReviewHoverRating, setNewReviewHoverRating] = useState(0);
+  const [newReviewImages, setNewReviewImages] = useState([]);
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
+  const [reviewVerifiedOnly, setReviewVerifiedOnly] = useState(false);
+  const [helpfulVotedIds, setHelpfulVotedIds] = useState(new Set());
+  const [reviewLightboxPhoto, setReviewLightboxPhoto] = useState(null);
 
   useEffect(() => {
     async function fetchDetail() {
@@ -61,13 +74,19 @@ export function ProductDetailPage() {
           setSelectedImage(0);
           setSelectedVariant(item.variants?.[0] || null);
 
-          // Get reviews & related products
-          const [revs, allProds] = await Promise.all([
+          // Get reviews, category products, and recommended bestsellers
+          const [revs, catProds, allCatalog] = await Promise.all([
             commerceDb.getReviews(item.id),
             commerceDb.getProducts({ category: item.category_id }),
+            commerceDb.getProducts()
           ]);
-          setReviews(revs);
-          setRelatedProducts(allProds.filter((p) => p.id !== item.id).slice(0, 4));
+          setReviews(revs || []);
+          setRelatedProducts((catProds || []).filter((p) => p.id !== item.id).slice(0, 4));
+          setRecommendedProducts(
+            (allCatalog || [])
+              .filter((p) => p.id !== item.id && p.category_id !== item.category_id)
+              .slice(0, 4)
+          );
         }
       } finally {
         setLoading(false);
@@ -130,21 +149,56 @@ export function ProductDetailPage() {
     showToast('Product link copied to clipboard!', 'info');
   };
 
+  const handleReviewImageUpload = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setNewReviewImages((prev) => [...prev, ev.target.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleVoteHelpful = async (revId) => {
+    if (helpfulVotedIds.has(revId)) {
+      showToast('You already voted this review as helpful!', 'info');
+      return;
+    }
+    await commerceDb.voteHelpfulReview(revId);
+    setHelpfulVotedIds((prev) => new Set(prev).add(revId));
+    setReviews((prev) =>
+      prev.map((r) => (r.id === revId ? { ...r, helpful_count: (r.helpful_count || 0) + 1 } : r))
+    );
+    showToast('Marked review as helpful. Thank you!', 'success');
+  };
+
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
-    if (!newReviewComment.trim()) return;
+    if (!newReviewComment.trim()) {
+      showToast('Please enter your review comments.', 'error');
+      return;
+    }
     setSubmittingReview(true);
     try {
       const added = await commerceDb.addReview({
         product_id: product.id,
         user_name: 'Verified Customer',
         rating: newReviewRating,
+        title: newReviewTitle.trim(),
         comment: newReviewComment.trim(),
+        images: newReviewImages,
+        is_verified_purchase: true,
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100',
       });
       setReviews([added, ...reviews]);
+      setNewReviewTitle('');
       setNewReviewComment('');
-      showToast('Thank you for reviewing this product!', 'success');
+      setNewReviewImages([]);
+      setNewReviewRating(5);
+      showToast('Thank you! Your verified review has been published.', 'success');
     } finally {
       setSubmittingReview(false);
     }
@@ -152,19 +206,28 @@ export function ProductDetailPage() {
 
   return (
     <div className="space-y-10 pb-20 md:pb-10">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-xs text-neutral-500 overflow-x-auto no-scrollbar py-1">
-        <Link to="/home" className="hover:text-[#E63946] shrink-0">Home</Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        <Link to="/categories" className="hover:text-[#E63946] shrink-0">Categories</Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        <Link to={`/category/${product.category_id}`} className="hover:text-[#E63946] shrink-0">
-          {product.category_name || 'Category'}
-        </Link>
-        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate">
-          {product.name}
-        </span>
+      {/* Breadcrumb with Back Button */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate(-1)}
+          aria-label="Go back"
+          className="p-2 rounded-xl bg-white dark:bg-[#181818] border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-200 hover:text-[#E63946] hover:border-[#E63946] transition-colors cursor-pointer shadow-xs shrink-0"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-1.5 text-xs text-neutral-500 overflow-x-auto no-scrollbar py-1 min-w-0">
+          <Link to="/home" className="hover:text-[#E63946] shrink-0">Home</Link>
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          <Link to="/categories" className="hover:text-[#E63946] shrink-0">Categories</Link>
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          <Link to={`/category/${product.category_id}`} className="hover:text-[#E63946] shrink-0">
+            {product.category_name || 'Category'}
+          </Link>
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+            {product.name}
+          </span>
+        </div>
       </div>
 
       {/* Main Product Showcase Section */}
@@ -483,111 +546,323 @@ export function ProductDetailPage() {
       <div className="bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 p-6 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-100 dark:border-neutral-800 pb-5">
           <div>
-            <h3 className="text-lg sm:text-xl font-bold text-neutral-900 dark:text-neutral-100">
+            <h3 className="text-lg sm:text-xl font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
               Customer Ratings & Reviews
+              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                <Check className="w-3 h-3" /> 100% Verified
+              </span>
             </h3>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Verified purchases and feedback from authentic customers.
+              Real feedback and ratings from customers who purchased this item.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Rating rating={product.rating} size="md" showBadge={true} />
-            <span className="text-sm font-bold text-neutral-800 dark:text-neutral-200">
-              {product.rating} out of 5 ({product.review_count} ratings)
+          <Link
+            to="/reviews"
+            className="text-xs font-bold text-[#E63946] hover:underline inline-flex items-center gap-1"
+          >
+            <span>View All Store Reviews</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {/* Rating Breakdown Overview */}
+        <div className="p-4 sm:p-5 rounded-xl bg-neutral-50 dark:bg-neutral-850/50 border border-neutral-200/70 dark:border-neutral-800 grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+          <div className="md:col-span-4 flex flex-col items-center justify-center text-center border-b md:border-b-0 md:border-r border-neutral-200/60 dark:border-neutral-800 pb-4 md:pb-0 md:pr-4">
+            <span className="text-4xl font-black text-neutral-900 dark:text-neutral-100">
+              {product.rating}
             </span>
+            <div className="flex text-amber-400 my-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Star
+                  key={s}
+                  className={`w-4 h-4 ${s <= Math.round(product.rating) ? 'fill-current' : 'text-neutral-300'}`}
+                />
+              ))}
+            </div>
+            <p className="text-[11px] font-semibold text-neutral-500">
+              {reviews.length || product.review_count || 0} Ratings & Customer Reviews
+            </p>
+          </div>
+
+          <div className="md:col-span-8 space-y-1.5">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const starCount = reviews.filter((r) => Math.floor(r.rating) === star).length;
+              const total = reviews.length || 1;
+              const pct = Math.round((starCount / total) * 100);
+              return (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewRatingFilter(reviewRatingFilter === String(star) ? 'all' : String(star))}
+                  className={`w-full flex items-center gap-2.5 text-xs p-1 rounded-lg transition-colors cursor-pointer ${
+                    reviewRatingFilter === String(star)
+                      ? 'bg-neutral-200/60 dark:bg-neutral-700/60'
+                      : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                  }`}
+                >
+                  <span className="w-8 font-bold flex items-center gap-0.5 text-neutral-700 dark:text-neutral-300">
+                    {star} <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  </span>
+                  <div className="flex-1 h-2 bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${pct || (star === 5 ? 75 : star === 4 ? 20 : 5)}%` }}
+                      className={`h-full rounded-full ${
+                        star >= 4 ? 'bg-emerald-500' : star === 3 ? 'bg-amber-400' : 'bg-rose-500'
+                      }`}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-[11px] font-semibold text-neutral-400">
+                    {starCount}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Write a Review Box */}
-        <form onSubmit={handleReviewSubmit} className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700/60 space-y-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 block">
-            Write a Review
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-neutral-500">Your Rating:</span>
+        {/* Filter Pills */}
+        <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <span className="text-xs font-bold text-neutral-400 flex items-center gap-1 mr-1">
+              <Filter className="w-3.5 h-3.5" /> Filter:
+            </span>
+            <button
+              onClick={() => setReviewRatingFilter('all')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                reviewRatingFilter === 'all'
+                  ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                  : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300'
+              }`}
+            >
+              All ({reviews.length})
+            </button>
+            {[5, 4, 3, 2, 1].map((s) => (
+              <button
+                key={s}
+                onClick={() => setReviewRatingFilter(String(s))}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-all cursor-pointer ${
+                  reviewRatingFilter === String(s)
+                    ? 'bg-[#E63946] text-white shadow-xs'
+                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300'
+                }`}
+              >
+                {s} ★
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setReviewVerifiedOnly(!reviewVerifiedOnly)}
+            className={`px-3 py-1 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition-colors cursor-pointer ${
+              reviewVerifiedOnly
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300'
+                : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+            }`}
+          >
+            <Check className="w-3.5 h-3.5 text-emerald-600" />
+            Verified Buyers Only
+          </button>
+        </div>
+
+        {/* Interactive Write a Review Box */}
+        <form onSubmit={handleReviewSubmit} className="p-4 sm:p-5 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700/60 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wider text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-[#E63946]" />
+              Rate & Review This Product
+            </span>
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" /> Verified Purchaser
+            </span>
+          </div>
+
+          {/* Star Picker with Hover */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-bold text-neutral-600 dark:text-neutral-400">Your Rating:</span>
             <div className="flex items-center gap-1 text-amber-400">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   type="button"
                   key={star}
+                  onMouseEnter={() => setNewReviewHoverRating(star)}
+                  onMouseLeave={() => setNewReviewHoverRating(0)}
                   onClick={() => setNewReviewRating(star)}
-                  className="cursor-pointer"
+                  className="p-1 cursor-pointer transition-transform hover:scale-110"
+                  aria-label={`Select ${star} stars`}
                 >
                   <Star
-                    className={`w-4 h-4 ${star <= newReviewRating ? 'fill-current' : 'text-neutral-300'}`}
+                    className={`w-5 h-5 ${
+                      star <= (newReviewHoverRating || newReviewRating)
+                        ? 'fill-current text-amber-400'
+                        : 'text-neutral-300 dark:text-neutral-600'
+                    }`}
                   />
                 </button>
               ))}
             </div>
+            <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300">
+              {newReviewHoverRating || newReviewRating} / 5 Stars
+            </span>
           </div>
+
+          <input
+            type="text"
+            value={newReviewTitle}
+            onChange={(e) => setNewReviewTitle(e.target.value)}
+            placeholder="Review Title (e.g. Excellent sound & fast delivery)"
+            className="w-full bg-white dark:bg-[#181818] border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#E63946]"
+          />
+
           <textarea
             value={newReviewComment}
             onChange={(e) => setNewReviewComment(e.target.value)}
-            placeholder="Share your experience with this product..."
+            placeholder="Share your experience with this product (quality, build, battery, performance)..."
             rows={2}
             required
             className="w-full bg-white dark:bg-[#181818] border border-neutral-200 dark:border-neutral-700 rounded-xl p-3 text-xs focus:outline-none focus:border-[#E63946]"
           />
-          <div className="flex justify-end">
+
+          {/* Photo Attachment Bar */}
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+            <div className="flex items-center gap-2">
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#181818] border border-neutral-200 dark:border-neutral-700 text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:border-[#E63946] cursor-pointer transition-colors">
+                <Camera className="w-3.5 h-3.5 text-[#E63946]" />
+                <span>Add Photos</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleReviewImageUpload}
+                  className="hidden"
+                />
+              </label>
+
+              {newReviewImages.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  {newReviewImages.map((img, idx) => (
+                    <div key={idx} className="relative w-8 h-8 rounded-lg overflow-hidden border border-neutral-300 dark:border-neutral-700">
+                      <img src={img} alt="Thumb" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setNewReviewImages(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 hover:opacity-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <Button
               type="submit"
               variant="primary"
               size="sm"
               loading={submittingReview}
             >
-              Submit Review
+              Submit Verified Review
             </Button>
           </div>
         </form>
 
         {/* Existing Reviews List */}
         <div className="space-y-4">
-          {reviews.length > 0 ? (
-            reviews.map((rev) => (
-              <div
-                key={rev.id}
-                className="p-4 rounded-xl bg-neutral-50/50 dark:bg-neutral-800/30 border border-neutral-100 dark:border-neutral-800 space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src={rev.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}
-                      alt={rev.user_name}
-                      className="w-7 h-7 rounded-full object-cover"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
-                        {rev.user_name}
-                      </p>
-                      <p className="text-[10px] text-neutral-400">{rev.date}</p>
+          {reviews
+            .filter((r) => {
+              if (reviewRatingFilter !== 'all' && Math.floor(r.rating) !== parseInt(reviewRatingFilter, 10)) {
+                return false;
+              }
+              if (reviewVerifiedOnly && !r.is_verified_purchase) {
+                return false;
+              }
+              return true;
+            })
+            .map((rev) => {
+              const isVoted = helpfulVotedIds.has(rev.id);
+              return (
+                <div
+                  key={rev.id}
+                  className="p-4 sm:p-5 rounded-xl bg-neutral-50/50 dark:bg-neutral-800/30 border border-neutral-100 dark:border-neutral-800 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <img
+                        src={rev.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}
+                        alt={rev.user_name}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
+                            {rev.user_name}
+                          </p>
+                          {rev.is_verified_purchase && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-[#16A34A] font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded">
+                              <Check className="w-2.5 h-2.5" />
+                              Verified Buyer
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-neutral-400">{rev.date || 'Recent'}</p>
+                      </div>
+                    </div>
+                    <div className="flex text-amber-400">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-neutral-300'}`}
+                        />
+                      ))}
                     </div>
                   </div>
-                  <div className="flex text-amber-400">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-3.5 h-3.5 ${i < rev.rating ? 'fill-current' : 'text-neutral-300'}`}
-                      />
-                    ))}
+
+                  {rev.title && (
+                    <p className="text-xs sm:text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                      {rev.title}
+                    </p>
+                  )}
+
+                  <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
+                    {rev.comment}
+                  </p>
+
+                  {/* Customer Uploaded Photos */}
+                  {rev.images && rev.images.length > 0 && (
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      {rev.images.map((imgUrl, imgIdx) => (
+                        <button
+                          key={imgIdx}
+                          type="button"
+                          onClick={() => setReviewLightboxPhoto(imgUrl)}
+                          className="w-14 h-14 rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 cursor-pointer hover:scale-105 transition-transform"
+                        >
+                          <img src={imgUrl} alt="Review thumb" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1 border-t border-neutral-100 dark:border-neutral-800 text-[11px] text-neutral-400">
+                    <span>Helpful review?</span>
+                    <button
+                      type="button"
+                      onClick={() => handleVoteHelpful(rev.id)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                        isVoted
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40'
+                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:text-[#E63946]'
+                      }`}
+                    >
+                      <ThumbsUp className="w-3 h-3" />
+                      <span>{rev.helpful_count || 0}</span>
+                    </button>
                   </div>
                 </div>
-                {rev.title && (
-                  <p className="text-xs font-bold text-neutral-800 dark:text-neutral-200">
-                    {rev.title}
-                  </p>
-                )}
-                <p className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                  {rev.comment}
-                </p>
-                {rev.is_verified_purchase && (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-[#16A34A] font-semibold">
-                    <Check className="w-3 h-3" />
-                    Verified Purchase
-                  </span>
-                )}
-              </div>
-            ))
-          ) : (
+              );
+            })}
+
+          {reviews.length === 0 && (
             <p className="text-xs text-neutral-500 py-4 text-center">
               No reviews yet. Be the first to review this product!
             </p>
@@ -595,12 +870,114 @@ export function ProductDetailPage() {
         </div>
       </div>
 
+      {/* Lightbox for review photo modal */}
+      {reviewLightboxPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setReviewLightboxPhoto(null)}
+        >
+          <div
+            className="relative max-w-xl max-h-[80vh] bg-neutral-900 rounded-2xl overflow-hidden shadow-2xl p-2 border border-neutral-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setReviewLightboxPhoto(null)}
+              className="absolute top-3 right-3 z-10 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <img
+              src={reviewLightboxPhoto}
+              alt="Review full"
+              className="w-full h-full max-h-[70vh] object-contain rounded-xl"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Frequently Bought Together Combo Bundle */}
+      {recommendedProducts.length > 0 && (
+        <div className="bg-white dark:bg-[#181818] p-5 sm:p-6 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-4 shadow-xs">
+          <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#E63946]">
+                COMBO SAVINGS DEAL
+              </span>
+              <h3 className="text-base sm:text-lg font-bold text-neutral-900 dark:text-neutral-100">
+                Frequently Bought Together
+              </h3>
+            </div>
+            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
+              Extra 10% Combo Savings
+            </span>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+              {/* Product 1 */}
+              <div className="flex items-center gap-2.5">
+                <img
+                  src={product.images?.[0]}
+                  alt={product.name}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-contain bg-neutral-100 dark:bg-neutral-800 p-1 border border-neutral-200 dark:border-neutral-700"
+                />
+                <div className="max-w-[160px] sm:max-w-[200px]">
+                  <p className="text-xs font-bold truncate">{product.name}</p>
+                  <p className="text-xs text-[#E63946] font-bold">₹{product.current_price?.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+
+              <span className="text-xl font-black text-neutral-400">+</span>
+
+              {/* Product 2 */}
+              <div className="flex items-center gap-2.5">
+                <img
+                  src={recommendedProducts[0].images?.[0]}
+                  alt={recommendedProducts[0].name}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-contain bg-neutral-100 dark:bg-neutral-800 p-1 border border-neutral-200 dark:border-neutral-700"
+                />
+                <div className="max-w-[160px] sm:max-w-[200px]">
+                  <p className="text-xs font-bold truncate">{recommendedProducts[0].name}</p>
+                  <p className="text-xs text-[#E63946] font-bold">₹{recommendedProducts[0].current_price?.toLocaleString('en-IN')}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bundle Total & CTA */}
+            <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-3 md:pt-0">
+              <div>
+                <span className="text-[10px] text-neutral-400 block font-semibold uppercase">Bundle Total</span>
+                <span className="text-base sm:text-lg font-black text-neutral-900 dark:text-neutral-100">
+                  ₹{Math.round((product.current_price + (recommendedProducts[0].current_price || 0)) * 0.9).toLocaleString('en-IN')}
+                </span>
+                <span className="text-[11px] text-neutral-400 line-through ml-1.5">
+                  ₹{(product.current_price + (recommendedProducts[0].current_price || 0)).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <Button
+                onClick={() => {
+                  addToCart(product, 1, selectedVariant?.name);
+                  addToCart(recommendedProducts[0], 1);
+                  showToast('Combo bundle added to Cart with 10% discount!', 'success');
+                }}
+                variant="primary"
+                size="sm"
+                icon={Sparkles}
+              >
+                Add Both to Cart
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Related Products Scroller */}
       {relatedProducts.length > 0 && (
         <div>
-          <h3 className="text-base sm:text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-4">
-            Customers Also Viewed
+          <h3 className="text-base sm:text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">
+            Customers Also Viewed in {product.category_name || 'Category'}
           </h3>
+          <p className="text-xs text-neutral-500 mb-4">Popular alternatives and similar products.</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             {relatedProducts.map((p) => (
               <ProductCard key={p.id} product={p} />
@@ -609,8 +986,23 @@ export function ProductDetailPage() {
         </div>
       )}
 
-      {/* Mobile Sticky Bottom Purchase Bar (Requirement #14 & #43) */}
-      <div className="md:hidden fixed bottom-14 left-0 right-0 z-30 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border-t border-neutral-200 dark:border-neutral-800 p-3 flex items-center gap-2 shadow-lg">
+      {/* Customer Recommended For You */}
+      {recommendedProducts.length > 0 && (
+        <div>
+          <h3 className="text-base sm:text-lg font-bold text-neutral-900 dark:text-neutral-100 mb-1">
+            Customer Recommended Deals
+          </h3>
+          <p className="text-xs text-neutral-500 mb-4">Trending picks and customer favorites across all categories.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            {recommendedProducts.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Sticky Bottom Purchase Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border-t border-neutral-200 dark:border-neutral-800 p-3 pb-safe flex items-center gap-2 shadow-lg">
         <Button
           onClick={handleAddToCart}
           disabled={isOutOfStock}

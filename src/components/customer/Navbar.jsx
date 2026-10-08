@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { SearchBar } from '../ui/SearchBar';
+import { PWAInstallButton } from '../ui/PWAInstallButton';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
@@ -33,7 +34,7 @@ export function Navbar() {
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-40 bg-white dark:bg-[#181818] border-b border-neutral-200 dark:border-neutral-800 shadow-xs transition-colors">
+    <header className="hidden md:block sticky top-0 z-40 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border-b border-neutral-200 dark:border-neutral-800 shadow-xs transition-colors">
       {/* Top Banner Notice / Role Switcher Utility */}
       <div className="bg-neutral-900 text-white dark:bg-neutral-950 text-xs py-1.5 px-4 hidden md:block border-b border-neutral-800">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -87,6 +88,9 @@ export function Navbar() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-5 shrink-0 ml-auto">
+          {/* PWA Install Button */}
+          <PWAInstallButton />
+
           {/* Dark / Light Toggle */}
           <button
             onClick={toggleTheme}
@@ -102,13 +106,15 @@ export function Navbar() {
             to="/wishlist"
             className="relative flex items-center gap-1.5 p-2 rounded-xl text-neutral-700 dark:text-neutral-200 hover:text-[#E63946] dark:hover:text-[#E63946] transition-colors group"
           >
-            <Heart className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            <div className="relative">
+              <Heart className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-[#E63946] text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center">
+                  {wishlistCount}
+                </span>
+              )}
+            </div>
             <span className="text-sm font-semibold hidden lg:inline">Wishlist</span>
-            {wishlistCount > 0 && (
-              <span className="absolute top-1 left-5 -translate-x-1/2 -translate-y-1/2 bg-[#E63946] text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white dark:border-[#181818]">
-                {wishlistCount}
-              </span>
-            )}
           </Link>
 
           {/* Cart Link */}

@@ -86,43 +86,74 @@ export function AdminCouponsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {coupons.map((c) => (
-          <div
-            key={c.id}
-            className="p-5 bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-3 shadow-xs flex flex-col justify-between"
+      {coupons.length === 0 ? (
+        <div className="py-16 flex flex-col items-center justify-center gap-4 bg-white dark:bg-[#181818] rounded-2xl border border-dashed border-neutral-200 dark:border-neutral-800">
+          <div className="w-16 h-16 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+            <Percent className="w-8 h-8 text-neutral-400" />
+          </div>
+          <div className="text-center max-w-xs">
+            <p className="font-extrabold text-sm text-neutral-800 dark:text-neutral-200">No Coupons Created</p>
+            <p className="text-xs text-neutral-500 mt-1.5 leading-relaxed">
+              No promo codes yet. Create your first discount coupon to run festive offers, flash sales or customer loyalty rewards.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenAdd}
+            className="group inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-[13px] tracking-wide text-white
+              bg-gradient-to-br from-[#EF3340] to-[#C92030]
+              hover:from-[#D92332] hover:to-[#B01C28]
+              active:scale-[0.96]
+              shadow-md shadow-red-500/30
+              hover:shadow-lg hover:shadow-red-500/40
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EF3340]/60 focus-visible:ring-offset-2
+              transition-all duration-200 cursor-pointer select-none"
           >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono font-black text-sm text-[#E63946] bg-[#E63946]/10 px-2.5 py-1 rounded-md">
-                  {c.code}
-                </span>
-                <button
-                  onClick={() => handleDelete(c.id)}
-                  className="text-neutral-400 hover:text-red-500 p-1"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+            <span className="flex items-center justify-center w-5 h-5 rounded-md bg-white/20 group-hover:bg-white/30 transition-colors duration-200">
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            </span>
+            <span>Create First Coupon</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {coupons.map((c) => (
+            <div
+              key={c.id}
+              className="p-5 bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 space-y-3 shadow-xs flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono font-black text-sm text-[#E63946] bg-[#E63946]/10 px-2.5 py-1 rounded-md">
+                    {c.code}
+                  </span>
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    className="text-neutral-400 hover:text-red-500 p-1"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <h4 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                  {c.description}
+                </h4>
+                <p className="text-xs text-neutral-500 mt-1">
+                  Discount: {c.discount_type === 'percentage' ? `${c.discount_value}% OFF` : `₹${c.discount_value} FLAT`}
+                </p>
+                <p className="text-[11px] text-neutral-400">
+                  Min. Order: ₹{c.minimum_order_amount} {c.maximum_discount_amount ? `• Max Cap: ₹${c.maximum_discount_amount}` : ''}
+                </p>
               </div>
 
-              <h4 className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
-                {c.description}
-              </h4>
-              <p className="text-xs text-neutral-500 mt-1">
-                Discount: {c.discount_type === 'percentage' ? `${c.discount_value}% OFF` : `₹${c.discount_value} FLAT`}
-              </p>
-              <p className="text-[11px] text-neutral-400">
-                Min. Order: ₹{c.minimum_order_amount} {c.maximum_discount_amount ? `• Max Cap: ₹${c.maximum_discount_amount}` : ''}
-              </p>
+              <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
+                <span>Used: {c.times_used || 0} times</span>
+                <span className="text-[#16A34A] font-semibold">Active</span>
+              </div>
             </div>
-
-            <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
-              <span>Used: {c.times_used || 0} times</span>
-              <span className="text-[#16A34A] font-semibold">Active</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <Modal
         isOpen={showModal}

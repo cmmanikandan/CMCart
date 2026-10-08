@@ -41,6 +41,22 @@ export function CartProvider({ children }) {
   });
 
   const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [selectedItemIds, setSelectedItemIds] = useState(() => {
+    return cartItems.map((i) => i.id);
+  });
+
+  // Keep selectedItemIds in sync when cart items are added/removed
+  useEffect(() => {
+    setSelectedItemIds((prev) => {
+      const currentIds = cartItems.map((i) => i.id);
+      // If newly added items exist, select them by default
+      const newlyAdded = currentIds.filter((id) => !prev.includes(id));
+      if (newlyAdded.length > 0) {
+        return [...prev.filter((id) => currentIds.includes(id)), ...newlyAdded];
+      }
+      return prev.filter((id) => currentIds.includes(id));
+    });
+  }, [cartItems]);
 
   useEffect(() => {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
@@ -49,6 +65,20 @@ export function CartProvider({ children }) {
   useEffect(() => {
     localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(savedForLater));
   }, [savedForLater]);
+
+  const toggleSelectItem = (cartItemId) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(cartItemId) ? prev.filter((id) => id !== cartItemId) : [...prev, cartItemId]
+    );
+  };
+
+  const selectAllItems = () => {
+    setSelectedItemIds(cartItems.map((i) => i.id));
+  };
+
+  const deselectAllItems = () => {
+    setSelectedItemIds([]);
+  };
 
   const addToCart = (product, variant = null, quantity = 1) => {
     const variantName = variant?.name || (typeof variant === 'string' ? variant : 'Default');
@@ -74,6 +104,7 @@ export function CartProvider({ children }) {
         stock: product.stock || 20
       };
       setCartItems((prev) => [...prev, newItem]);
+      setSelectedItemIds((prev) => [...prev, newItem.id]);
       showToast(`Added ${product.name} to Cart`, 'success');
     }
   };
@@ -140,12 +171,21 @@ export function CartProvider({ children }) {
 
   const clearCart = () => {
     setCartItems([]);
+    setSelectedItemIds([]);
     setAppliedCoupon(null);
   };
 
-  // Calculations
-  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const totalOriginal = cartItems.reduce((acc, item) => acc + item.originalPrice * item.quantity, 0);
+  const clearPurchasedItems = () => {
+    setCartItems((prev) => prev.filter((item) => !selectedItemIds.includes(item.id)));
+    setSelectedItemIds([]);
+    setAppliedCoupon(null);
+  };
+
+  // Calculations ONLY for selected items
+  const selectedCartItems = cartItems.filter((item) => selectedItemIds.includes(item.id));
+
+  const subtotal = selectedCartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalOriginal = selectedCartItems.reduce((acc, item) => acc + item.originalPrice * item.quantity, 0);
   const catalogDiscount = Math.max(0, totalOriginal - subtotal);
 
   let couponDiscount = 0;
@@ -169,11 +209,17 @@ export function CartProvider({ children }) {
   const totalAmount = taxableAmount + deliveryFee;
 
   const totalCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  const selectedCount = selectedCartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
     <CartContext.Provider
       value={{
         cartItems,
+        selectedItemIds,
+        selectedCartItems,
+        toggleSelectItem,
+        selectAllItems,
+        deselectAllItems,
         savedForLater,
         addToCart,
         removeFromCart,
@@ -184,6 +230,7 @@ export function CartProvider({ children }) {
         applyCoupon,
         removeCoupon,
         clearCart,
+        clearPurchasedItems,
         appliedCoupon,
         subtotal,
         totalOriginal,
@@ -193,6 +240,7 @@ export function CartProvider({ children }) {
         taxAmount,
         totalAmount,
         count: totalCount,
+        selectedCount,
       }}
     >
       {children}

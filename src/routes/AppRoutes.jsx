@@ -12,7 +12,7 @@ import { OnboardingPage } from '../pages/auth/OnboardingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
-import { VerifyEmailPage } from '../pages/auth/VerifyEmailPage';
+import { ProfileWizardPage } from '../pages/auth/ProfileWizardPage';
 
 // Customer Pages
 import { HomePage } from '../pages/customer/HomePage';
@@ -27,6 +27,7 @@ import { CheckoutPage } from '../pages/customer/CheckoutPage';
 import { OrdersPage } from '../pages/customer/OrdersPage';
 import { OrderDetailPage } from '../pages/customer/OrderDetailPage';
 import { OrderTrackingPage } from '../pages/customer/OrderTrackingPage';
+import { InvoicePage } from '../pages/customer/InvoicePage';
 import { ProfilePage } from '../pages/customer/ProfilePage';
 import { EditProfilePage } from '../pages/customer/EditProfilePage';
 import { AddressesPage } from '../pages/customer/AddressesPage';
@@ -39,15 +40,21 @@ import { HelpPage } from '../pages/customer/HelpPage';
 // Admin Pages
 import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
 import { AdminProductsPage } from '../pages/admin/AdminProductsPage';
+import { AdminProductEditorPage } from '../pages/admin/AdminProductEditorPage';
 import { AdminCategoriesPage } from '../pages/admin/AdminCategoriesPage';
 import { AdminInventoryPage } from '../pages/admin/AdminInventoryPage';
 import { AdminOrdersPage } from '../pages/admin/AdminOrdersPage';
+import { AdminOrderDetailPage } from '../pages/admin/AdminOrderDetailPage';
 import { AdminCustomersPage } from '../pages/admin/AdminCustomersPage';
 import { AdminCouponsPage } from '../pages/admin/AdminCouponsPage';
 import { AdminBannersPage } from '../pages/admin/AdminBannersPage';
 import { AdminReviewsPage } from '../pages/admin/AdminReviewsPage';
 import { AdminNotificationsPage } from '../pages/admin/AdminNotificationsPage';
 import { AdminSettingsPage } from '../pages/admin/AdminSettingsPage';
+import { AdminReportsPage } from '../pages/admin/AdminReportsPage';
+import { AdminPaymentsPage } from '../pages/admin/AdminPaymentsPage';
+import { AdminAnalyticsPage } from '../pages/admin/AdminAnalyticsPage';
+import { AdminHomepageManagerPage } from '../pages/admin/AdminHomepageManagerPage';
 
 export function AppRoutes() {
   return (
@@ -56,11 +63,12 @@ export function AppRoutes() {
       <Route path="/splash" element={<SplashScreen />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
 
-      {/* Auth Routes */}
+      {/* Auth & Profile Wizard Routes */}
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/profile-wizard" element={<ProfileWizardPage />} />
+      <Route path="/onboarding/profile-wizard" element={<ProfileWizardPage />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
+      <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
 
       {/* Customer Storefront Routes */}
       <Route element={<CustomerLayout />}>
@@ -76,7 +84,9 @@ export function AppRoutes() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/order/:id" element={<OrderDetailPage />} />
-        <Route path="/order/:id/tracking" element={<OrderTrackingPage />} />
+        <Route path="/order/:id/tracking" element={<OrderDetailPage />} />
+        <Route path="/order/:id/invoice" element={<InvoicePage />} />
+        <Route path="/invoice/:id" element={<InvoicePage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/edit" element={<EditProfilePage />} />
         <Route path="/addresses" element={<AddressesPage />} />
@@ -99,10 +109,20 @@ export function AppRoutes() {
         }
       >
         <Route index element={<AdminDashboardPage />} />
+        <Route path="orders" element={<AdminOrdersPage />} />
+        <Route path="orders/:id" element={<AdminOrderDetailPage />} />
         <Route path="products" element={<AdminProductsPage />} />
+        <Route path="products/new" element={<AdminProductEditorPage />} />
+        <Route path="products/edit/:id" element={<AdminProductEditorPage />} />
+        <Route path="products/:id" element={<AdminProductEditorPage />} />
+        <Route path="homepage" element={<AdminHomepageManagerPage />} />
+        <Route path="deals" element={<AdminHomepageManagerPage />} />
         <Route path="categories" element={<AdminCategoriesPage />} />
         <Route path="inventory" element={<AdminInventoryPage />} />
-        <Route path="orders" element={<AdminOrdersPage />} />
+        <Route path="payments" element={<AdminPaymentsPage />} />
+        <Route path="payment-history" element={<AdminPaymentsPage />} />
+        <Route path="reports" element={<AdminReportsPage />} />
+        <Route path="analytics" element={<AdminAnalyticsPage />} />
         <Route path="customers" element={<AdminCustomersPage />} />
         <Route path="coupons" element={<AdminCouponsPage />} />
         <Route path="banners" element={<AdminBannersPage />} />

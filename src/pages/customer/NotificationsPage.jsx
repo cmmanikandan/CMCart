@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, CheckCheck, Trash2, ArrowLeft, ArrowRight, Tag, Zap, Truck } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, ArrowLeft, ArrowRight, Tag, Zap, Truck, X } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { commerceDb } from '../../services/supabase/supabaseClient';
@@ -24,6 +24,13 @@ export function NotificationsPage() {
 
   const handleMarkAsRead = async (id) => {
     await commerceDb.markNotificationAsRead(id);
+    loadNotifs();
+  };
+
+  const handleDeleteNotification = async (e, id) => {
+    e.stopPropagation();
+    await commerceDb.deleteNotification(id);
+    showToast('Notification removed', 'info');
     loadNotifs();
   };
 
@@ -117,9 +124,19 @@ export function NotificationsPage() {
                 )}
               </div>
 
-              {!notif.is_read && (
-                <span className="w-2 h-2 rounded-full bg-[#E63946] shrink-0 mt-2" />
-              )}
+              <div className="flex items-center gap-2 shrink-0 self-start">
+                {!notif.is_read && (
+                  <span className="w-2 h-2 rounded-full bg-[#E63946]" />
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteNotification(e, notif.id)}
+                  className="p-1 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 hover:text-[#DC2626] dark:hover:text-[#DC2626] transition-colors cursor-pointer"
+                  title="Delete notification"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>

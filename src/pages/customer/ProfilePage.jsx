@@ -29,24 +29,66 @@ export function ProfilePage() {
     {
       title: 'Orders & Shopping',
       items: [
-        { label: 'My Orders', desc: 'Track, return or buy again', to: '/orders', icon: Package },
-        { label: 'Wishlist', desc: `${wishlistCount} items saved`, to: '/wishlist', icon: Heart },
-        { label: 'Cart', desc: `${cartCount} items in cart`, to: '/cart', icon: ShoppingBag },
+        {
+          label: 'My Orders',
+          to: '/orders',
+          icon: Package,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+        },
+        {
+          label: 'Wishlist',
+          to: '/wishlist',
+          icon: Heart,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+          badge: wishlistCount,
+        },
+        {
+          label: 'Cart',
+          to: '/cart',
+          icon: ShoppingBag,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+          badge: cartCount,
+        },
       ]
     },
     {
       title: 'Preferences & Benefits',
       items: [
-        { label: 'Saved Addresses', desc: 'Manage home & office delivery addresses', to: '/addresses', icon: MapPin },
-        { label: 'Coupons & Offers', desc: 'Active promo discounts & festival vouchers', to: '/coupons', icon: Percent },
-        { label: 'Notifications', desc: 'Order alerts and special deals', to: '/notifications', icon: Bell },
+        {
+          label: 'Saved Addresses',
+          to: '/addresses',
+          icon: MapPin,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+        },
+        {
+          label: 'Coupons & Offers',
+          to: '/coupons',
+          icon: Percent,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+        },
+        {
+          label: 'Notifications',
+          to: '/notifications',
+          icon: Bell,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+        },
       ]
     },
     {
       title: 'Account Settings & Support',
       items: [
-        { label: 'Settings', desc: 'Theme, dark mode & preferences', to: '/settings', icon: Settings },
-        { label: 'Help & Customer Care', desc: 'FAQs, returns and support assistance', to: '/help', icon: HelpCircle },
+        {
+          label: 'Settings',
+          to: '/settings',
+          icon: Settings,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+        },
+        {
+          label: 'Help & Customer Care',
+          to: '/help',
+          icon: HelpCircle,
+          iconBg: 'bg-[#E63946]/10 text-[#E63946] dark:bg-[#E63946]/20 dark:text-[#E63946]',
+        },
       ]
     }
   ];
@@ -54,13 +96,13 @@ export function ProfilePage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-10">
       {/* Profile Header Card */}
-      <div className="bg-white dark:bg-[#181818] p-5 sm:p-8 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-xs">
+      <div className="bg-white dark:bg-[#181818] p-5 sm:p-7 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-5 shadow-xs">
         <div className="flex items-center gap-4">
           <div className="relative">
             <img
               src={user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
               alt={user?.displayName}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-[#E63946]"
+              className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl object-cover border-2 border-[#E63946]"
             />
           </div>
           <div>
@@ -99,8 +141,53 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {/* Menu Groups */}
-      <div className="space-y-6">
+      {/* Mobile Quick Action Strip */}
+      <div className="grid grid-cols-4 gap-2.5 sm:hidden">
+        <Link
+          to="/orders"
+          className="bg-white dark:bg-[#181818] p-3 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-transform"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#E63946]/10 dark:bg-[#E63946]/20 text-[#E63946] flex items-center justify-center">
+            <Package className="w-5 h-5" />
+          </div>
+          <span className="text-[11px] font-bold text-neutral-800 dark:text-neutral-200">Orders</span>
+        </Link>
+        <Link
+          to="/wishlist"
+          className="bg-white dark:bg-[#181818] p-3 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-transform relative"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#E63946]/10 dark:bg-[#E63946]/20 text-[#E63946] flex items-center justify-center relative">
+            <Heart className="w-5 h-5" />
+            {wishlistCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#E63946] text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {wishlistCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-bold text-neutral-800 dark:text-neutral-200">Wishlist</span>
+        </Link>
+        <Link
+          to="/coupons"
+          className="bg-white dark:bg-[#181818] p-3 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-transform"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#E63946]/10 dark:bg-[#E63946]/20 text-[#E63946] flex items-center justify-center">
+            <Percent className="w-5 h-5" />
+          </div>
+          <span className="text-[11px] font-bold text-neutral-800 dark:text-neutral-200">Coupons</span>
+        </Link>
+        <Link
+          to="/help"
+          className="bg-white dark:bg-[#181818] p-3 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-transform"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#E63946]/10 dark:bg-[#E63946]/20 text-[#E63946] flex items-center justify-center">
+            <HelpCircle className="w-5 h-5" />
+          </div>
+          <span className="text-[11px] font-bold text-neutral-800 dark:text-neutral-200">Help</span>
+        </Link>
+      </div>
+
+      {/* Menu Groups - Clean without descriptions, vibrant colored icons by default */}
+      <div className="space-y-5">
         {menuSections.map((section, sIdx) => (
           <div key={sIdx} className="bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 overflow-hidden shadow-xs">
             <div className="px-5 py-3 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30">
@@ -115,20 +202,24 @@ export function ProfilePage() {
                   <Link
                     key={iIdx}
                     to={item.to}
-                    className="flex items-center justify-between p-4 sm:p-5 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors group"
+                    className="flex items-center justify-between p-3.5 sm:p-4 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 active:bg-neutral-100 dark:active:bg-neutral-800 transition-colors group"
                   >
                     <div className="flex items-center gap-3.5">
-                      <div className="w-9 h-9 rounded-xl bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 flex items-center justify-center group-hover:bg-[#E63946]/10 group-hover:text-[#E63946] transition-colors">
-                        <Icon className="w-4.5 h-4.5" />
+                      <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl ${item.iconBg} flex items-center justify-center shrink-0 shadow-xs transition-transform group-hover:scale-105`}>
+                        <Icon className="w-5 h-5" />
                       </div>
-                      <div>
-                        <h4 className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-neutral-100 group-hover:text-[#E63946] transition-colors">
-                          {item.label}
-                        </h4>
-                        <p className="text-[11px] text-neutral-400">{item.desc}</p>
-                      </div>
+                      <h4 className="text-sm sm:text-[15px] font-semibold text-neutral-900 dark:text-neutral-100 group-hover:text-[#E63946] transition-colors">
+                        {item.label}
+                      </h4>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-neutral-400 group-hover:translate-x-0.5 transition-transform" />
+                    <div className="flex items-center gap-2">
+                      {item.badge > 0 && (
+                        <span className="bg-[#E63946] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                      <ChevronRight className="w-4.5 h-4.5 text-neutral-400 group-hover:text-[#E63946] group-hover:translate-x-0.5 transition-all" />
+                    </div>
                   </Link>
                 );
               })}

@@ -5,7 +5,7 @@ import { ShieldCheck, Truck, RotateCcw, Headphones, Heart } from 'lucide-react';
 
 export function Footer() {
   return (
-    <footer className="bg-white dark:bg-[#151515] border-t border-neutral-200 dark:border-neutral-800 mt-auto pb-16 md:pb-0 transition-colors">
+    <footer className="hidden md:block bg-white dark:bg-[#151515] border-t border-neutral-200 dark:border-neutral-800 mt-auto transition-colors">
       {/* Value Proposition Highlights */}
       <div className="border-b border-neutral-100 dark:border-neutral-800/80 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">

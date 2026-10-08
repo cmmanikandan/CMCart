@@ -163,17 +163,23 @@ export function OrderTrackingPage() {
           </div>
           <div className="space-y-2 max-h-40 overflow-y-auto">
             {order.items?.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-3 text-xs">
+              <Link
+                key={idx}
+                to={`/product/${item.product_id || item.id}`}
+                className="flex items-center gap-3 text-xs group hover:bg-neutral-50 dark:hover:bg-neutral-800/50 p-1.5 rounded-lg transition-colors"
+              >
                 <img
                   src={item.image}
                   alt={item.product_name}
-                  className="w-10 h-10 rounded-lg object-cover bg-neutral-100"
+                  className="w-10 h-10 rounded-lg object-cover bg-neutral-100 group-hover:scale-105 transition-transform"
                 />
                 <div className="truncate flex-1">
-                  <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate">{item.product_name}</p>
+                  <p className="font-semibold text-neutral-800 dark:text-neutral-200 truncate group-hover:text-[#E63946] transition-colors">
+                    {item.product_name}
+                  </p>
                   <p className="text-neutral-400">Qty: {item.quantity}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

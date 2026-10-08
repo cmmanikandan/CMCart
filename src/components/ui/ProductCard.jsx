@@ -35,10 +35,10 @@ export function ProductCard({ product, className = '' }) {
     >
       {/* Badges Overlay */}
       <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1 pointer-events-none">
-        {product.is_deal_of_the_day && (
+        {(product.deal_badge || product.is_deal_of_the_day) && (
           <span className="bg-[#E63946] text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
             <Zap className="w-3 h-3 fill-current" />
-            DEAL
+            {product.deal_badge || 'DEAL'}
           </span>
         )}
         {product.is_best_seller && (
@@ -91,16 +91,14 @@ export function ProductCard({ product, className = '' }) {
       {/* Details Container */}
       <div className="p-3 sm:p-4 flex flex-col flex-1">
         {/* Brand */}
-        {product.brand && (
-          <p className="text-[11px] font-semibold tracking-wide uppercase text-neutral-400 dark:text-neutral-500 mb-1 truncate">
-            {product.brand}
-          </p>
-        )}
+        <p className="text-[11px] font-semibold tracking-wide uppercase text-neutral-400 dark:text-neutral-500 mb-1 truncate min-h-[16px]">
+          {product.brand || product.category || '\u00A0'}
+        </p>
 
         {/* Product Title */}
         <Link
           to={`/product/${product.id}`}
-          className="text-xs sm:text-sm font-medium text-neutral-900 dark:text-neutral-100 hover:text-[#E63946] dark:hover:text-[#E63946] transition-colors line-clamp-2 leading-snug mb-2 flex-1"
+          className="text-xs sm:text-sm font-semibold text-neutral-900 dark:text-neutral-100 hover:text-[#E63946] dark:hover:text-[#E63946] transition-colors line-clamp-2 leading-snug mb-2 h-9 sm:h-10 flex items-start"
           title={product.name}
         >
           {product.name}

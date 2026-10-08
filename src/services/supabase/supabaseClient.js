@@ -1,41 +1,194 @@
 /**
  * CMCart Supabase PostgreSQL Client & Reactive Data Store
- * Provides seamless PostgreSQL interface with resilient fallback caching
- * ensuring zero broken pages, fast response times, and immediate updates.
+ * Provides seamless PostgreSQL interface with resilient localStorage caching.
+ * No mock/seed data — starts with empty store until real data is uploaded or created.
  */
 
-import {
-  INITIAL_PRODUCTS,
-  INITIAL_CATEGORIES,
-  INITIAL_BANNERS,
-  INITIAL_COUPONS,
-  INITIAL_ORDERS,
-  INITIAL_ADDRESSES,
-  INITIAL_REVIEWS,
-  INITIAL_NOTIFICATIONS
-} from '../../data/mockData';
+import { supabase } from './supabaseInit';
 
-const STORAGE_KEY = 'cmcart_commerce_store_v2';
+const STORAGE_KEY = 'cmcart_commerce_store_v3';
+const REGISTRY_KEY = 'cmcart_datasets_registry_v1';
+const MIGRATION_KEY = 'cmcart_v4_migrated';
 
-// Helper to initialize local persistent data
+// One-time migration: remove the old auto-seeded 'built-in-temp' entry
+// so the dataset manager shows correct empty state on first load after this update.
+if (!localStorage.getItem(MIGRATION_KEY)) {
+  try {
+    const raw = localStorage.getItem(REGISTRY_KEY);
+    if (raw) {
+      let reg = JSON.parse(raw);
+      reg = reg.filter(d => d.id !== 'built-in-temp' && !d.isTemporary);
+      // If all removed, clear overlay flag too
+      if (reg.length === 0) {
+        localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'false');
+        // Reset store to empty
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          products: [], categories: [], banners: [], coupons: [], orders: [],
+          addresses: [], reviews: [], notifications: [], homepage_sections: [],
+          deals: [], campaigns: [], customers: []
+        }));
+      } else {
+        localStorage.setItem(REGISTRY_KEY, JSON.stringify(reg));
+      }
+    } else {
+      // No registry — ensure overlay is off and store is empty
+      localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'false');
+    }
+  } catch (e) { /* ignore */ }
+  localStorage.setItem(MIGRATION_KEY, '1');
+}
+
+const INITIAL_HOMEPAGE_SECTIONS = [
+  {
+    id: 'sec-hero',
+    title: 'Hero Banner Carousel',
+    subtitle: 'Top promotional slides & seasonal spotlights',
+    section_type: 'hero_banner',
+    display_order: 1,
+    status: 'active',
+    layout: 'carousel',
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-deals',
+    title: 'Deals of the Day',
+    subtitle: 'Unbeatable discounts up to 60% off',
+    section_type: 'deals',
+    display_order: 2,
+    status: 'active',
+    layout: 'carousel',
+    deal_id: null,
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-categories',
+    title: 'Explore Popular Categories',
+    subtitle: 'Shop by your favorite departments',
+    section_type: 'categories',
+    display_order: 3,
+    status: 'active',
+    layout: 'horizontal_scroll',
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-bestsellers',
+    title: 'Best Sellers',
+    subtitle: 'Most loved products by verified shoppers',
+    section_type: 'best_sellers',
+    display_order: 4,
+    status: 'active',
+    layout: 'grid',
+    config: { mode: 'automatic', salesPeriod: '30d', limit: 8 },
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-banner-promo',
+    title: 'Promotional Banner',
+    subtitle: 'Featured store-wide promotional banner',
+    section_type: 'banner_promo',
+    display_order: 5,
+    status: 'active',
+    layout: 'banner',
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-newarrivals',
+    title: 'Fresh New Arrivals',
+    subtitle: 'Latest tech, trending fits and accessories',
+    section_type: 'new_arrivals',
+    display_order: 6,
+    status: 'active',
+    layout: 'grid',
+    config: { mode: 'automatic', limit: 8 },
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-coupons',
+    title: 'Offers & Coupons',
+    subtitle: 'Claim exclusive bank discounts and vouchers',
+    section_type: 'coupons',
+    display_order: 7,
+    status: 'active',
+    layout: 'grid',
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'sec-recommended',
+    title: 'Recommended For You',
+    subtitle: 'Curated based on your browsing taste',
+    section_type: 'recommended',
+    display_order: 8,
+    status: 'active',
+    layout: 'grid',
+    start_at: null,
+    end_at: null,
+    created_at: new Date().toISOString()
+  }
+];
+
+// Empty initial store — no mock data
+const EMPTY_STORE = {
+  products: [],
+  categories: [],
+  banners: [],
+  coupons: [],
+  orders: [],
+  addresses: [],
+  reviews: [],
+  notifications: [],
+  homepage_sections: INITIAL_HOMEPAGE_SECTIONS,
+  deals: [],
+  campaigns: [],
+  customers: []
+};
+
 function getStore() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      let needsSave = false;
+      if (!parsed.homepage_sections) {
+        parsed.homepage_sections = INITIAL_HOMEPAGE_SECTIONS;
+        needsSave = true;
+      }
+      if (!parsed.deals) {
+        parsed.deals = [];
+        needsSave = true;
+      }
+      if (!parsed.campaigns) {
+        parsed.campaigns = [];
+        needsSave = true;
+      }
+      if (!parsed.customers) {
+        parsed.customers = [];
+        needsSave = true;
+      }
+      if (needsSave) {
+        saveStore(parsed);
+      }
+      return parsed;
+    }
   } catch (e) {
     console.error('Failed reading store from localStorage', e);
   }
 
-  const initial = {
-    products: INITIAL_PRODUCTS,
-    categories: INITIAL_CATEGORIES,
-    banners: INITIAL_BANNERS,
-    coupons: INITIAL_COUPONS,
-    orders: INITIAL_ORDERS,
-    addresses: INITIAL_ADDRESSES,
-    reviews: INITIAL_REVIEWS,
-    notifications: INITIAL_NOTIFICATIONS,
-  };
+  // First time visit — start with empty store, no mock data
+  const initial = { ...EMPTY_STORE };
   saveStore(initial);
   return initial;
 }
@@ -63,8 +216,8 @@ export const commerceDb = {
     }
     if (params.search) {
       const q = params.search.toLowerCase();
-      items = items.filter(p => 
-        p.name.toLowerCase().includes(q) || 
+      items = items.filter(p =>
+        p.name.toLowerCase().includes(q) ||
         p.description?.toLowerCase().includes(q) ||
         p.brand?.toLowerCase().includes(q)
       );
@@ -204,6 +357,17 @@ export const commerceDb = {
     return newBan;
   },
 
+  async updateBanner(id, updates) {
+    const store = getStore();
+    const idx = store.banners.findIndex(b => b.id === id);
+    if (idx !== -1) {
+      store.banners[idx] = { ...store.banners[idx], ...updates };
+      saveStore(store);
+      return store.banners[idx];
+    }
+    return null;
+  },
+
   async deleteBanner(id) {
     const store = getStore();
     store.banners = store.banners.filter(b => b.id !== id);
@@ -228,11 +392,27 @@ export const commerceDb = {
       id: `ord-${Date.now().toString().slice(-5)}`,
       order_number: `CMC-2026-${Math.floor(10000 + Math.random() * 90000)}`,
       date: new Date().toISOString(),
-      status: 'Confirmed',
+      status: orderPayload.status || 'Confirmed',
       estimated_delivery: 'In 2-3 business days',
       tracking_number: `TRK-${Math.floor(1000000 + Math.random() * 9000000)}`,
       carrier: 'CMCart Express Logistics',
       ...orderPayload,
+      items: (orderPayload.items || []).map((item) => ({
+        ...item,
+        product_id: item.product_id || item.id,
+        product_name_snapshot: item.product_name || item.name,
+        variant_id: item.variant_id || item.variantId || 'var-default',
+        variant_name_snapshot: item.variant || item.variant_name || 'Standard',
+        sku: item.sku || `CMC-${item.product_id || 'PROD'}-STD`,
+        selected_options: item.selected_options || {
+          color: item.color || item.variantColor || null,
+          size: item.size || item.variantSize || null,
+          storage: item.storage || null
+        },
+        unit_price: Number(item.unit_price || item.current_price || item.price || 0),
+        quantity: Number(item.quantity || 1),
+        image: item.image || (item.images && item.images[0]) || ''
+      })),
       timeline: [
         { status: 'Order Placed', time: 'Just now', completed: true, note: 'Payment confirmed & order accepted' },
         { status: 'Packed', time: 'Pending fulfillment', completed: false, note: 'Will be processed at nearest fulfillment hub' },
@@ -264,11 +444,11 @@ export const commerceDb = {
     if (!order) return null;
 
     order.status = newStatus;
-    
+
     // Update timeline step completion
     const stepOrder = ['Order Placed', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered'];
     const currentIdx = stepOrder.indexOf(newStatus);
-    
+
     if (currentIdx !== -1) {
       order.timeline.forEach((step, idx) => {
         if (idx <= currentIdx) {
@@ -282,6 +462,80 @@ export const commerceDb = {
 
     saveStore(store);
     return order;
+  },
+
+  async markPaymentCollected(orderId) {
+    const store = getStore();
+    const order = store.orders.find(o => o.id === orderId || o.order_number === orderId);
+    if (!order) return null;
+
+    order.payment_status = 'Completed';
+    order.is_paid = true;
+    order.cod_collected = true;
+    order.cod_collected_at = new Date().toISOString();
+
+    if (!order.timeline) order.timeline = [];
+    order.timeline.push({
+      status: 'COD Payment Collected',
+      time: 'Just now',
+      completed: true,
+      note: 'COD payment marked as collected by admin.'
+    });
+
+    saveStore(store);
+    return order;
+  },
+
+  async getPayments() {
+    const store = getStore();
+    return store.orders.map((ord, idx) => {
+      const isCod = ord.payment_method?.toLowerCase().includes('cash');
+      const isPaid = ord.payment_status === 'Completed' || ord.cod_collected || (!isCod && !ord.payment_status?.toLowerCase().includes('fail'));
+      const seed = ord.order_number?.replace(/\D/g, '') || String(idx + 1000);
+      return {
+        id: isCod ? `cod_${seed}` : `pay_rzp_${seed}`,
+        orderId: ord.id,
+        orderNumber: ord.order_number,
+        customerName: ord.shipping_address?.full_name || 'Customer Shopper',
+        customerPhone: ord.shipping_address?.phone || '+91 98765 43210',
+        date: ord.date || new Date().toISOString(),
+        amount: ord.total_amount || 0,
+        method: ord.payment_method || (isCod ? 'Cash on Delivery' : 'Online Payment (Razorpay)'),
+        gateway: isCod ? 'COD Executive Collection' : 'Razorpay PG',
+        status: isPaid ? (isCod ? 'COLLECTED' : 'PAID') : (isCod ? 'COD_PENDING' : 'UNPAID'),
+        isPaid: Boolean(isPaid),
+        isCod: Boolean(isCod),
+        deliveryStatus: ord.status,
+        createdAt: ord.date
+      };
+    });
+  },
+
+  async getCustomers() {
+    const store = getStore();
+    const custMap = new Map();
+    (store.orders || []).forEach((o) => {
+      const name = o.shipping_address?.full_name || 'Unknown Customer';
+      if (!custMap.has(name)) {
+        custMap.set(name, {
+          id: `cust-${custMap.size + 101}`,
+          name,
+          email: `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+          phone: o.shipping_address?.phone || '',
+          city: o.shipping_address?.city || '',
+          state: o.shipping_address?.state || '',
+          joinedDate: o.date ? new Date(o.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+          ordersCount: 1,
+          totalSpent: o.total_amount || 0,
+          status: 'Active'
+        });
+      } else {
+        const c = custMap.get(name);
+        c.ordersCount += 1;
+        c.totalSpent += o.total_amount || 0;
+      }
+    });
+    return Array.from(custMap.values());
   },
 
   // COUPONS
@@ -301,6 +555,17 @@ export const commerceDb = {
     store.coupons.push(newCoupon);
     saveStore(store);
     return newCoupon;
+  },
+
+  async updateCoupon(id, updates) {
+    const store = getStore();
+    const idx = store.coupons.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      store.coupons[idx] = { ...store.coupons[idx], ...updates };
+      saveStore(store);
+      return store.coupons[idx];
+    }
+    return null;
   },
 
   async deleteCoupon(id) {
@@ -326,11 +591,23 @@ export const commerceDb = {
       date: 'Today',
       helpful_count: 0,
       is_verified_purchase: true,
+      images: [],
       ...review
     };
     store.reviews.unshift(newReview);
     saveStore(store);
     return newReview;
+  },
+
+  async voteHelpfulReview(reviewId) {
+    const store = getStore();
+    const rev = store.reviews.find(r => r.id === reviewId);
+    if (rev) {
+      rev.helpful_count = (rev.helpful_count || 0) + 1;
+      saveStore(store);
+      return rev.helpful_count;
+    }
+    return 0;
   },
 
   // ADDRESSES
@@ -403,6 +680,13 @@ export const commerceDb = {
     return [];
   },
 
+  async deleteNotification(id) {
+    const store = getStore();
+    store.notifications = store.notifications.filter(n => n.id !== id);
+    saveStore(store);
+    return store.notifications;
+  },
+
   // ADMIN ANALYTICS
   async getAdminStats() {
     const store = getStore();
@@ -411,22 +695,540 @@ export const commerceDb = {
     const totalProducts = store.products.length;
     const lowStockCount = store.products.filter(p => p.stock <= 5).length;
 
+    const totalCustomers = (store.customers && store.customers.length > 0)
+      ? store.customers.length
+      : new Set((store.orders || []).map(o => o.shipping_address?.full_name || o.customer_name).filter(Boolean)).size;
+
     return {
       totalRevenue,
       totalOrders,
-      totalCustomers: 1240, // Simulated active customer count
+      totalCustomers,
       totalProducts,
       lowStockCount,
-      recentOrders: store.orders.slice(0, 5),
-      topProducts: store.products.filter(p => p.is_best_seller).slice(0, 4),
-      salesTrend: [
-        { month: 'May', sales: 420000 },
-        { month: 'Jun', sales: 510000 },
-        { month: 'Jul', sales: 680000 },
-        { month: 'Aug', sales: 740000 },
-        { month: 'Sep', sales: 890000 },
-        { month: 'Oct', sales: 1120000 }
+      recentOrders: (store.orders || []).slice(0, 5),
+      topProducts: (store.products || []).filter(p => p.is_best_seller).slice(0, 4),
+      salesTrend: []
+    };
+  },
+
+  // ==================================================
+  // HOMEPAGE SECTIONS CMS ENGINE
+  // ==================================================
+  async getHomepageSections({ activeOnly = false } = {}) {
+    const store = getStore();
+    const now = new Date();
+
+    let sections = (store.homepage_sections || []).map(sec => {
+      let dynamicStatus = sec.status;
+      if (sec.status !== 'disabled' && sec.status !== 'draft') {
+        if (sec.start_at && new Date(sec.start_at) > now) {
+          dynamicStatus = 'scheduled';
+        } else if (sec.end_at && new Date(sec.end_at) < now) {
+          dynamicStatus = 'expired';
+        } else {
+          dynamicStatus = 'active';
+        }
+      }
+      return { ...sec, dynamicStatus };
+    });
+
+    if (activeOnly) {
+      sections = sections.filter(sec => sec.dynamicStatus === 'active');
+    }
+
+    // Sort by display_order ascending
+    return sections.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+  },
+
+  async getHomepageSectionById(id) {
+    const store = getStore();
+    return (store.homepage_sections || []).find(s => s.id === id) || null;
+  },
+
+  async createHomepageSection(data) {
+    const store = getStore();
+    store.homepage_sections = store.homepage_sections || [];
+    const maxOrder = store.homepage_sections.reduce((max, s) => Math.max(max, s.display_order || 0), 0);
+    const newSection = {
+      ...data,
+      id: `sec-${Date.now()}`,
+      display_order: data.display_order ?? maxOrder + 1,
+      status: data.status || 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    store.homepage_sections.push(newSection);
+    saveStore(store);
+    return newSection;
+  },
+
+  async updateHomepageSection(id, updates) {
+    const store = getStore();
+    store.homepage_sections = store.homepage_sections || [];
+    const idx = store.homepage_sections.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      store.homepage_sections[idx] = {
+        ...store.homepage_sections[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      saveStore(store);
+      return store.homepage_sections[idx];
+    }
+    return null;
+  },
+
+  async reorderHomepageSections(orderedSections) {
+    const store = getStore();
+    store.homepage_sections = store.homepage_sections || [];
+    orderedSections.forEach((item, index) => {
+      const id = typeof item === 'string' ? item : item.id;
+      const target = store.homepage_sections.find(s => s.id === id);
+      if (target) {
+        target.display_order = index + 1;
+      }
+    });
+    store.homepage_sections.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+    saveStore(store);
+    return store.homepage_sections;
+  },
+
+  async duplicateHomepageSection(id) {
+    const store = getStore();
+    store.homepage_sections = store.homepage_sections || [];
+    const original = store.homepage_sections.find(s => s.id === id);
+    if (!original) return null;
+    const maxOrder = store.homepage_sections.reduce((max, s) => Math.max(max, s.display_order || 0), 0);
+    const duplicated = {
+      ...original,
+      id: `sec-${Date.now()}`,
+      title: `${original.title} (Copy)`,
+      display_order: maxOrder + 1,
+      status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    store.homepage_sections.push(duplicated);
+    saveStore(store);
+    return duplicated;
+  },
+
+  async deleteHomepageSection(id) {
+    const store = getStore();
+    store.homepage_sections = (store.homepage_sections || []).filter(s => s.id !== id);
+    // Normalize display orders
+    store.homepage_sections.forEach((s, idx) => {
+      s.display_order = idx + 1;
+    });
+    saveStore(store);
+    return true;
+  },
+
+  // ==================================================
+  // DEALS MANAGEMENT
+  // ==================================================
+  async getDeals({ activeOnly = false } = {}) {
+    const store = getStore();
+    const now = new Date();
+    let deals = (store.deals || []).map(deal => {
+      let dynamicStatus = deal.status;
+      if (deal.status !== 'disabled') {
+        if (deal.start_at && new Date(deal.start_at) > now) {
+          dynamicStatus = 'scheduled';
+        } else if (deal.end_at && new Date(deal.end_at) < now) {
+          dynamicStatus = 'expired';
+        } else {
+          dynamicStatus = 'active';
+        }
+      }
+      return { ...deal, dynamicStatus };
+    });
+
+    if (activeOnly) {
+      deals = deals.filter(d => d.dynamicStatus === 'active');
+    }
+    return deals;
+  },
+
+  async getDealById(id) {
+    const store = getStore();
+    return (store.deals || []).find(d => d.id === id) || null;
+  },
+
+  async createDeal(data) {
+    const store = getStore();
+    store.deals = store.deals || [];
+    const newDeal = {
+      ...data,
+      id: `deal-${Date.now()}`,
+      status: data.status || 'active',
+      deal_badge: data.deal_badge || 'DEAL',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    store.deals.push(newDeal);
+    saveStore(store);
+    return newDeal;
+  },
+
+  async updateDeal(id, updates) {
+    const store = getStore();
+    store.deals = store.deals || [];
+    const idx = store.deals.findIndex(d => d.id === id);
+    if (idx !== -1) {
+      store.deals[idx] = {
+        ...store.deals[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      saveStore(store);
+      return store.deals[idx];
+    }
+    return null;
+  },
+
+  async deleteDeal(id) {
+    const store = getStore();
+    store.deals = (store.deals || []).filter(d => d.id !== id);
+    saveStore(store);
+    return true;
+  },
+
+  // ==================================================
+  // CAMPAIGNS MANAGEMENT
+  // ==================================================
+  async getCampaigns() {
+    const store = getStore();
+    const now = new Date();
+    return (store.campaigns || []).map(camp => {
+      let dynamicStatus = camp.status;
+      if (camp.status !== 'disabled' && camp.status !== 'draft') {
+        if (camp.start_at && new Date(camp.start_at) > now) {
+          dynamicStatus = 'scheduled';
+        } else if (camp.end_at && new Date(camp.end_at) < now) {
+          dynamicStatus = 'expired';
+        } else {
+          dynamicStatus = 'active';
+        }
+      }
+      return { ...camp, dynamicStatus };
+    });
+  },
+
+  async createCampaign(data) {
+    const store = getStore();
+    store.campaigns = store.campaigns || [];
+    const newCamp = {
+      ...data,
+      id: `camp-${Date.now()}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    store.campaigns.push(newCamp);
+    saveStore(store);
+    return newCamp;
+  },
+
+  async updateCampaign(id, updates) {
+    const store = getStore();
+    store.campaigns = store.campaigns || [];
+    const idx = store.campaigns.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      store.campaigns[idx] = {
+        ...store.campaigns[idx],
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      saveStore(store);
+      return store.campaigns[idx];
+    }
+    return null;
+  },
+
+  async deleteCampaign(id) {
+    const store = getStore();
+    store.campaigns = (store.campaigns || []).filter(c => c.id !== id);
+    saveStore(store);
+    return true;
+  },
+
+  // ==================================================
+  // DATASET MANAGEMENT (LIVE COMMERCE DATA HUB)
+  // ==================================================
+  isDatasetOverlayEnabled() {
+    const val = localStorage.getItem('cmcart_dataset_overlay_enabled_v1');
+    return val === 'true';
+  },
+
+  setDatasetOverlayEnabled(enabled) {
+    localStorage.setItem('cmcart_dataset_overlay_enabled_v1', enabled ? 'true' : 'false');
+
+    if (!enabled) {
+      // Switched OFF: Pure Live Mode -> Only real live database records
+      const emptyStore = { ...EMPTY_STORE };
+      saveStore(emptyStore);
+    } else {
+      // Switched ON: Load and activate the active dataset from registry
+      const registry = this.getDatasets();
+      const active = registry.find(d => d.isActive) || registry[0];
+      if (active && active.data) {
+        saveStore(active.data);
+      }
+    }
+
+    try {
+      window.dispatchEvent(new CustomEvent('cmcart_dataset_updated', { detail: { enabled } }));
+    } catch (e) {}
+    return enabled;
+  },
+
+  getDatasets() {
+    let registry = [];
+    try {
+      const raw = localStorage.getItem(REGISTRY_KEY);
+      if (raw !== null) {
+        registry = JSON.parse(raw);
+      }
+    } catch (e) {
+      console.error('Failed reading datasets registry', e);
+    }
+    // Return whatever is in registry — no auto-seeding of built-in temp
+    return registry;
+  },
+
+  uploadDataset({ name, description, data }) {
+    let registry = this.getDatasets();
+
+    // Standardize incoming data payload
+    const incomingData = {
+      products: Array.isArray(data.products) ? data.products : (Array.isArray(data.data?.products) ? data.data.products : []),
+      categories: Array.isArray(data.categories) ? data.categories : (Array.isArray(data.data?.categories) ? data.data.categories : []),
+      orders: Array.isArray(data.orders) ? data.orders : (Array.isArray(data.data?.orders) ? data.data.orders : []),
+      coupons: Array.isArray(data.coupons) ? data.coupons : (Array.isArray(data.data?.coupons) ? data.data.coupons : []),
+      banners: Array.isArray(data.banners) ? data.banners : (Array.isArray(data.data?.banners) ? data.data.banners : []),
+      reviews: Array.isArray(data.reviews) ? data.reviews : (Array.isArray(data.data?.reviews) ? data.data.reviews : []),
+      addresses: Array.isArray(data.addresses) ? data.addresses : (Array.isArray(data.data?.addresses) ? data.data.addresses : []),
+      notifications: Array.isArray(data.notifications) ? data.notifications : (Array.isArray(data.data?.notifications) ? data.data.notifications : []),
+      homepage_sections: Array.isArray(data.homepage_sections) ? data.homepage_sections : INITIAL_HOMEPAGE_SECTIONS,
+      deals: Array.isArray(data.deals) ? data.deals : [],
+      campaigns: Array.isArray(data.campaigns) ? data.campaigns : []
+    };
+
+    const newRev = incomingData.orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+    const newId = `ds-${Date.now()}`;
+
+    // Mark others as inactive
+    registry = registry.map(ds => ({ ...ds, isActive: false }));
+
+    const newEntry = {
+      id: newId,
+      name: name || `Dataset ${new Date().toLocaleDateString()}`,
+      description: description || 'Uploaded custom live dataset',
+      isTemporary: false,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      stats: {
+        orders: incomingData.orders.length,
+        products: incomingData.products.length,
+        categories: incomingData.categories.length,
+        revenue: newRev
+      },
+      data: incomingData
+    };
+
+    registry.unshift(newEntry);
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+
+    // Overwrite active store and ensure dataset mode is ON
+    localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'true');
+    saveStore(incomingData);
+
+    try {
+      window.dispatchEvent(new CustomEvent('cmcart_dataset_updated', { detail: { activeDatasetId: newId, enabled: true } }));
+    } catch (e) {
+      // ignore
+    }
+    return newEntry;
+  },
+
+  activateDataset(datasetId) {
+    let registry = this.getDatasets();
+    const target = registry.find(d => d.id === datasetId);
+    if (!target) return false;
+
+    if (target.data) {
+      saveStore(target.data);
+    }
+
+    registry = registry.map(ds => ({
+      ...ds,
+      isActive: ds.id === datasetId
+    }));
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+    localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'true');
+
+    try {
+      window.dispatchEvent(new CustomEvent('cmcart_dataset_updated', { detail: { activeDatasetId: datasetId, enabled: true } }));
+    } catch (e) {
+      // ignore
+    }
+    return true;
+  },
+
+  deleteDataset(datasetId) {
+    let registry = this.getDatasets();
+    const targetIndex = registry.findIndex(d => d.id === datasetId);
+    if (targetIndex === -1) return false;
+
+    const wasActive = registry[targetIndex].isActive;
+    registry.splice(targetIndex, 1);
+
+    if (wasActive) {
+      // Find next available dataset (prefer non-temporary ones)
+      const nextDataset = registry.find(d => d.data);
+      if (nextDataset) {
+        registry = registry.map(d => ({ ...d, isActive: d.id === nextDataset.id }));
+        saveStore(nextDataset.data);
+        localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'true');
+      } else {
+        // No datasets remain — purge store to empty state, disable overlay
+        saveStore({ ...EMPTY_STORE });
+        localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'false');
+      }
+    }
+
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
+
+    try {
+      window.dispatchEvent(new CustomEvent('cmcart_dataset_updated', {
+        detail: { activeDatasetId: registry.find(d => d.isActive)?.id || null }
+      }));
+    } catch (e) {
+      // ignore
+    }
+    return true;
+  },
+
+  purgeAllData() {
+    const emptyStore = { ...EMPTY_STORE };
+    saveStore(emptyStore);
+
+    // Clear registry entirely
+    localStorage.setItem(REGISTRY_KEY, JSON.stringify([]));
+    localStorage.setItem('cmcart_dataset_overlay_enabled_v1', 'false');
+
+    try {
+      window.dispatchEvent(new CustomEvent('cmcart_dataset_updated', { detail: { activeDatasetId: null } }));
+    } catch (e) {
+      // ignore
+    }
+    return true;
+  },
+
+  getMasterTemplate() {
+    return {
+      metadata: {
+        template_name: "CMCart Master Live Commerce Dataset Template",
+        version: "2.0",
+        format: "application/json",
+        description: "Official import template for CMCart and external analytics (CMCart Insights)",
+        generated_at: new Date().toISOString()
+      },
+      instructions: [
+        "1. Fill in your real categories, products, orders, and coupons in the arrays below.",
+        "2. Save this file as a .json file and upload it in CMCart Settings -> Dataset Manager.",
+        "3. Once uploaded, CMCart immediately runs with this data and the API exposes it to CMCart Insights.",
+        "4. You can delete or replace this dataset anytime with 1-click."
+      ],
+      categories: [
+        {
+          id: "cat-electronics",
+          name: "Electronics",
+          slug: "electronics",
+          description: "Smartphones, Audio, Laptops and Accessories",
+          icon: "Smartphone",
+          is_active: true
+        },
+        {
+          id: "cat-fashion",
+          name: "Fashion",
+          slug: "fashion",
+          description: "Apparel, Footwear and Accessories",
+          icon: "Shirt",
+          is_active: true
+        }
+      ],
+      products: [
+        {
+          id: "prod-1001",
+          name: "Sony WH-1000XM5 Wireless Noise-Cancelling Headphones",
+          slug: "sony-wh-1000xm5-headphones",
+          category_id: "cat-electronics",
+          category_name: "Electronics",
+          brand: "Sony",
+          sku: "SNY-WH1000XM5-BLK",
+          current_price: 26990,
+          original_price: 34990,
+          discount_percentage: 23,
+          rating: 4.8,
+          review_count: 1420,
+          stock: 45,
+          status: "in_stock",
+          is_active: true,
+          is_featured: true,
+          is_deal_of_the_day: true,
+          images: [
+            "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80"
+          ],
+          description: "Premium noise cancelling headphones with 30-hour battery life."
+        }
+      ],
+      orders: [
+        {
+          id: "ord-90001",
+          order_number: "CMC-2026-90001",
+          date: new Date().toISOString(),
+          status: "Delivered",
+          subtotal: 26990,
+          discount_amount: 1000,
+          delivery_fee: 0,
+          tax_amount: 4678,
+          total_amount: 30668,
+          payment_method: "UPI",
+          payment_status: "Paid",
+          tracking_number: "BLUEDART-992144",
+          carrier: "BlueDart Express",
+          shipping_address: {
+            full_name: "Rahul Sharma",
+            phone: "+91 98765 43210",
+            address_line: "Flat 402, Skyline Residency, Indiranagar",
+            city: "Bengaluru",
+            state: "Karnataka",
+            pincode: "560038"
+          },
+          items: [
+            {
+              product_id: "prod-1001",
+              product_name: "Sony WH-1000XM5 Wireless Noise-Cancelling Headphones",
+              unit_price: 26990,
+              quantity: 1,
+              total: 26990
+            }
+          ]
+        }
+      ],
+      coupons: [
+        {
+          id: "coup-1",
+          code: "WELCOME50",
+          discount_type: "fixed",
+          discount_value: 500,
+          minimum_order_amount: 1999,
+          is_active: true
+        }
       ]
     };
   }
 };
+
+export { supabase };

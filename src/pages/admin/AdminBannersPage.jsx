@@ -93,41 +93,72 @@ export function AdminBannersPage() {
       </div>
 
       <div className="space-y-4">
-        {banners.map((b) => (
-          <div
-            key={b.id}
-            className="p-4 sm:p-5 bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
-          >
-            <div className="flex items-center gap-4 min-w-0">
-              <img
-                src={b.image_url}
-                alt={b.title}
-                className="w-28 h-16 rounded-xl object-cover bg-neutral-900 shrink-0 border"
-              />
-              <div className="truncate">
-                <span className="text-[10px] font-extrabold text-[#E63946] uppercase tracking-wider block">
-                  {b.tag}
-                </span>
-                <h4 className="text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
-                  {b.title}
-                </h4>
-                <p className="text-xs text-neutral-400 truncate">{b.subtitle}</p>
-                <span className="text-[11px] text-neutral-500 mt-1 block">
-                  CTA: "{b.cta_text}" → {b.cta_link}
-                </span>
+        {banners.length === 0 ? (
+          <div className="py-16 flex flex-col items-center justify-center gap-4 bg-white dark:bg-[#181818] rounded-2xl border border-dashed border-neutral-200 dark:border-neutral-800">
+            <div className="w-16 h-16 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+              <ImageIcon className="w-8 h-8 text-neutral-400" />
+            </div>
+            <div className="text-center max-w-xs">
+              <p className="font-extrabold text-sm text-neutral-800 dark:text-neutral-200">No Banners Published</p>
+              <p className="text-xs text-neutral-500 mt-1.5 leading-relaxed">
+                No homepage hero banners yet. Add your first promotional banner to showcase deals on the storefront carousel.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenAdd}
+              className="group inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-[13px] tracking-wide text-white
+                bg-gradient-to-br from-[#EF3340] to-[#C92030]
+                hover:from-[#D92332] hover:to-[#B01C28]
+                active:scale-[0.96]
+                shadow-md shadow-red-500/30
+                hover:shadow-lg hover:shadow-red-500/40
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EF3340]/60 focus-visible:ring-offset-2
+                transition-all duration-200 cursor-pointer select-none"
+            >
+              <span className="flex items-center justify-center w-5 h-5 rounded-md bg-white/20 group-hover:bg-white/30 transition-colors duration-200">
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              </span>
+              <span>Add First Banner</span>
+            </button>
+          </div>
+        ) : (
+          banners.map((b) => (
+            <div
+              key={b.id}
+              className="p-4 sm:p-5 bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs"
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                <img
+                  src={b.image_url}
+                  alt={b.title}
+                  className="w-28 h-16 rounded-xl object-cover bg-neutral-900 shrink-0 border"
+                />
+                <div className="truncate">
+                  <span className="text-[10px] font-extrabold text-[#E63946] uppercase tracking-wider block">
+                    {b.tag}
+                  </span>
+                  <h4 className="text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100 truncate">
+                    {b.title}
+                  </h4>
+                  <p className="text-xs text-neutral-400 truncate">{b.subtitle}</p>
+                  <span className="text-[11px] text-neutral-500 mt-1 block">
+                    CTA: "{b.cta_text}" → {b.cta_link}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleDelete(b.id)}
+                  className="p-2 text-neutral-400 hover:text-red-500 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => handleDelete(b.id)}
-                className="p-2 text-neutral-400 hover:text-red-500 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       <Modal

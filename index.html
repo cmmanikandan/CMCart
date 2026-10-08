@@ -3,14 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="CMCart" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#E63946" />
-    <meta name="description" content="CMCart - Production-Quality E-Commerce Platform. Shop top deals across electronics, fashion, home, beauty, and more." />
+    <meta name="description" content="CMCart - Official E-Commerce App. Shop top deals across electronics, fashion, home, beauty, and more." />
     <title>CMCart | Mass-Market E-Commerce</title>
-    <!-- Google Fonts: Inter -->
+    <!-- Google Fonts: Inter, Plus Jakarta Sans, Outfit -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Theme initialization -->
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('cmcart_theme');
+          if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
   <body class="bg-[#F7F7F7] text-[#171717] antialiased selection:bg-[#E63946] selection:text-white">
     <div id="root"></div>

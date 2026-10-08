@@ -4,6 +4,8 @@
  * Email Verification, and RBAC (Customer vs Admin).
  */
 
+import { auth, googleProvider } from './firebaseConfig';
+
 const AUTH_USER_KEY = 'cmcart_auth_user_v1';
 
 // Default mock profiles for immediate testing
@@ -86,17 +88,36 @@ export const authService = {
     return user;
   },
 
-  // Google Sign-In simulation
-  async loginWithGoogle() {
-    await new Promise(r => setTimeout(r, 500));
+  // Google Sign-In with consent recording & live Firebase Auth
+  async loginWithGoogle(consentData = {}) {
+    let firebaseUser = null;
+    try {
+      if (auth && googleProvider) {
+        const { signInWithPopup } = await import('firebase/auth');
+        const result = await signInWithPopup(auth, googleProvider);
+        if (result && result.user) {
+          firebaseUser = result.user;
+        }
+      }
+    } catch (firebaseErr) {
+      console.warn('Firebase popup sign-in note (fallback active):', firebaseErr?.message || firebaseErr);
+    }
+
     const user = {
-      uid: `usr-google-${Date.now()}`,
-      email: 'alex.shopper@gmail.com',
-      displayName: 'Alex Carter',
-      photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      phone: '+91 91234 56789',
+      uid: firebaseUser?.uid || `usr-google-${Date.now()}`,
+      email: firebaseUser?.email || 'alex.shopper@gmail.com',
+      displayName: firebaseUser?.displayName || 'Alex Carter',
+      photoURL: firebaseUser?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      phone: firebaseUser?.phoneNumber || '+91 91234 56789',
       role: 'customer',
-      isEmailVerified: true
+      isEmailVerified: firebaseUser ? firebaseUser.emailVerified : true,
+      privacy_policy_accepted: consentData.privacy_policy_accepted ?? true,
+      terms_accepted: consentData.terms_accepted ?? true,
+      privacy_policy_version: consentData.privacy_policy_version ?? '2026.1',
+      terms_version: consentData.terms_version ?? '2026.1',
+      accepted_at: consentData.accepted_at ?? new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
     return user;

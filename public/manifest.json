@@ -1,0 +1,25 @@
+{
+  "name": "CMCart",
+  "short_name": "CMCart",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#E63946",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["shopping", "ecommerce", "business"],
+  "description": "CMCart - Official Mass-Market E-Commerce App. Enjoy lightning-fast shopping, deals of the day, instant checkout, and order tracking."
+}
