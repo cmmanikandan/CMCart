@@ -30,12 +30,14 @@ import { ProductCard } from '../../components/ui/ProductCard';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { commerceDb } from '../../services/supabase/supabaseClient';
 import { getOptimizedImageUrl } from '../../services/cloudinary/cloudinaryService';
 
 export function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { showToast } = useToast();
@@ -126,10 +128,20 @@ export function ProductDetailPage() {
   const isOutOfStock = product.stock <= 0;
 
   const handleAddToCart = () => {
+    if (!user) {
+      showToast('Please sign in to add items to your cart', 'warning');
+      navigate('/login');
+      return;
+    }
     addToCart(product, selectedVariant, quantity);
   };
 
   const handleBuyNow = () => {
+    if (!user) {
+      showToast('Please sign in to complete your purchase', 'warning');
+      navigate('/login');
+      return;
+    }
     addToCart(product, selectedVariant, quantity);
     navigate('/checkout');
   };
@@ -247,7 +259,14 @@ export function ProductDetailPage() {
             {/* Floating Action Buttons */}
             <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
               <button
-                onClick={() => toggleWishlist(product)}
+                onClick={() => {
+                  if (!user) {
+                    showToast('Please sign in to save items to your wishlist', 'warning');
+                    navigate('/login');
+                    return;
+                  }
+                  toggleWishlist(product);
+                }}
                 aria-label="Wishlist"
                 className="w-10 h-10 rounded-full bg-white dark:bg-[#181818] text-neutral-600 dark:text-neutral-300 shadow-md flex items-center justify-center hover:text-[#E63946] transition-colors cursor-pointer"
               >

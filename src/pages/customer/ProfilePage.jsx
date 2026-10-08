@@ -93,6 +93,30 @@ export function ProfilePage() {
     }
   ];
 
+  if (!user) {
+    return (
+      <div className="max-w-md mx-auto my-10 p-6 sm:p-8 bg-white dark:bg-[#181818] rounded-3xl border border-neutral-200/80 dark:border-neutral-800 text-center space-y-5 shadow-xl transition-colors">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-[#E63946] flex items-center justify-center mx-auto border border-rose-100 dark:border-rose-900/50">
+          <User className="w-8 h-8" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="text-2xl font-black text-neutral-900 dark:text-neutral-50">
+            Sign In to Your Account
+          </h2>
+          <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
+            Access your orders, saved addresses, wishlist items, and special coupons.
+          </p>
+        </div>
+        <Link
+          to="/login"
+          className="inline-flex items-center justify-center gap-2 w-full py-3.5 px-6 rounded-2xl border-2 border-[#E63946] bg-[#E63946] text-white font-bold text-sm hover:bg-[#D62828] transition-all shadow-md active:scale-98"
+        >
+          <span>Sign In to Continue</span>
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-10">
       {/* Profile Header Card */}

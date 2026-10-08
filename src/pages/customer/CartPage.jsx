@@ -14,6 +14,7 @@ import {
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 import { getOptimizedImageUrl } from '../../services/cloudinary/cloudinaryService';
 
 export function CartPage() {
@@ -44,6 +45,7 @@ export function CartPage() {
 
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const isAllSelected = cartItems.length > 0 && selectedItemIds.length === cartItems.length;
@@ -413,7 +415,13 @@ export function CartPage() {
             </div>
 
             <Button
-              onClick={() => navigate('/checkout')}
+              onClick={() => {
+                if (!user) {
+                  navigate('/login', { state: { from: { pathname: '/checkout' } } });
+                  return;
+                }
+                navigate('/checkout');
+              }}
               variant="primary"
               size="lg"
               disabled={selectedCount === 0}

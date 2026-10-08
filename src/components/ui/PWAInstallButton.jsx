@@ -1,12 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Smartphone } from 'lucide-react';
+import { Smartphone } from 'lucide-react';
 
 export function PWAInstallButton({ variant = 'outline', className = '' }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const [isStandaloneApp, setIsStandaloneApp] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+      window.navigator.standalone === true ||
+      document.referrer.includes('android-app://') ||
+      localStorage.getItem('cmcart_pwa_installed') === 'true'
+    );
+  });
 
   useEffect(() => {
+    // Check if already in standalone PWA window
+    const checkStandalone = () => {
+      const isStandalone =
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+        window.navigator.standalone === true ||
+        document.referrer.includes('android-app://') ||
+        localStorage.getItem('cmcart_pwa_installed') === 'true';
+      setIsStandaloneApp(isStandalone);
+    };
+
+    checkStandalone();
+
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -15,8 +35,13 @@ export function PWAInstallButton({ variant = 'outline', className = '' }) {
 
     const handleAppInstalled = () => {
       setIsInstallable(false);
-      setInstalled(true);
+      setIsStandaloneApp(true);
       setDeferredPrompt(null);
+      try {
+        localStorage.setItem('cmcart_pwa_installed', 'true');
+      } catch (e) {
+        console.error(e);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -28,10 +53,19 @@ export function PWAInstallButton({ variant = 'outline', className = '' }) {
     };
   }, []);
 
+  // DO NOT show install button if app is already installed or running as standalone PWA
+  if (isStandaloneApp) {
+    return null;
+  }
+
+  // If browser does not support install prompt and is not installable, don't show
+  if (!isInstallable && !deferredPrompt) {
+    return null;
+  }
+
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      // Fallback instruction for browsers without direct prompt
-      alert('To install CMCart App: tap your browser menu (⋮ or Share) and select "Add to Home Screen" or "Install CMCart".');
+      alert('To install CMCart App: Tap your browser menu (⋮ or Share) and select "Add to Home Screen" or "Install CMCart".');
       return;
     }
 
@@ -39,11 +73,15 @@ export function PWAInstallButton({ variant = 'outline', className = '' }) {
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
       setIsInstallable(false);
+      setIsStandaloneApp(true);
+      try {
+        localStorage.setItem('cmcart_pwa_installed', 'true');
+      } catch (e) {
+        console.error(e);
+      }
     }
     setDeferredPrompt(null);
   };
-
-  if (installed) return null;
 
   return (
     <button

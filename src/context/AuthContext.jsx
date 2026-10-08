@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/firebase/firebaseAuth';
+import { auth } from '../services/firebase/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -8,6 +10,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false);
 
   const isAdmin = user?.role === 'admin';
+
+  // Listen for live Firebase authentication session changes
+  useEffect(() => {
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        const appUser = await authService.syncFirebaseUser(fbUser);
+        setUser(appUser);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const login = async (email, password) => {
     setLoading(true);
@@ -42,8 +56,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    await authService.logout();
     setUser(null);
   };
 

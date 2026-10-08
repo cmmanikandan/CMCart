@@ -20,10 +20,12 @@ import { BrandLogo } from '../ui/BrandLogo';
 import { PWAInstallButton } from '../ui/PWAInstallButton';
 import { useCart } from '../../context/CartContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { commerceDb } from '../../services/supabase/supabaseClient';
 import { getOptimizedImageUrl } from '../../services/cloudinary/cloudinaryService';
 
 export function MobileHeader() {
+  const { user } = useAuth();
   const { count: cartCount } = useCart();
   const { isDark, toggleTheme } = useTheme();
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -160,6 +162,24 @@ export function MobileHeader() {
                 </span>
               )}
             </Link>
+
+            {/* Mobile Top Sign In / Profile Button */}
+            {!user ? (
+              <Link
+                to="/login"
+                className="ml-1 px-2.5 py-1.5 rounded-xl bg-[#E63946] text-white text-xs font-bold hover:bg-[#D62828] active:scale-95 transition-all shadow-xs shrink-0"
+              >
+                Sign In
+              </Link>
+            ) : (
+              <Link to="/profile" className="ml-1 shrink-0 p-0.5">
+                <img
+                  src={user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}
+                  alt={user.displayName || 'Profile'}
+                  className="w-7 h-7 rounded-full object-cover border-2 border-[#E63946]"
+                />
+              </Link>
+            )}
           </div>
         </div>
       </header>

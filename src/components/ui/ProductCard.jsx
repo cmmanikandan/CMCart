@@ -1,6 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, ShoppingBag, Star, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import { Price } from './Price';
 import { Rating } from './Rating';
 import { useWishlist } from '../../context/WishlistContext';
@@ -8,6 +11,9 @@ import { useCart } from '../../context/CartContext';
 import { getOptimizedImageUrl } from '../../services/cloudinary/cloudinaryService';
 
 export function ProductCard({ product, className = '' }) {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { addToCart } = useCart();
 
@@ -18,12 +24,22 @@ export function ProductCard({ product, className = '' }) {
   const handleWishlistClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!user) {
+      showToast('Please sign in to save items to your wishlist', 'warning');
+      navigate('/login');
+      return;
+    }
     toggleWishlist(product);
   };
 
   const handleAddToCart = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!user) {
+      showToast('Please sign in to add items to your cart', 'warning');
+      navigate('/login');
+      return;
+    }
     if (!isOutOfStock) {
       addToCart(product, product.variants?.[0] || null, 1);
     }

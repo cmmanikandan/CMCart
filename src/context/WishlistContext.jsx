@@ -1,40 +1,60 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
+import { commerceDb } from '../services/supabase/supabaseClient';
 
 const WishlistContext = createContext();
 const WISHLIST_KEY = 'cmcart_wishlist_v1';
 
 export function WishlistProvider({ children }) {
+  const { showToast } = useToast();
+  const { user } = useAuth();
+
   const [wishlist, setWishlist] = useState(() => {
     try {
       const stored = localStorage.getItem(WISHLIST_KEY);
-      return stored ? JSON.parse(stored) : [
-        // Seed 1 item for immediate delight
-        {
-          id: 'prod-2',
-          name: 'Apple Watch Series 9 GPS 45mm Midnight Aluminum',
-          current_price: 39999,
-          original_price: 44900,
-          discount_percentage: 11,
-          rating: 4.9,
-          review_count: 890,
-          images: [
-            'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80'
-          ]
-        }
-      ];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Clear obsolete mock seed item
+        return parsed.filter((item) => item.id !== 'prod-2');
+      }
+      return [];
     } catch {
       return [];
     }
   });
 
-  const { showToast } = useToast();
+  // Purge products that were deleted or deactivated by admin from customer wishlist
+  useEffect(() => {
+    let isSubscribed = true;
+    commerceDb.getProducts().then((liveProducts) => {
+      if (!isSubscribed || !Array.isArray(liveProducts)) return;
+      const validIds = new Set(
+        liveProducts
+          .filter((p) => p.status !== 'inactive' && p.status !== 'deleted')
+          .map((p) => String(p.id))
+      );
+      setWishlist((prev) => {
+        const cleaned = prev.filter((item) => validIds.has(String(item.id)));
+        if (cleaned.length !== prev.length) {
+          localStorage.setItem(WISHLIST_KEY, JSON.stringify(cleaned));
+        }
+        return cleaned;
+      });
+    }).catch((e) => console.warn('Wishlist product validation notice:', e));
+    return () => { isSubscribed = false; };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist));
   }, [wishlist]);
 
   const toggleWishlist = (product) => {
+    if (!user) {
+      showToast('Please sign in to add items to your wishlist!', 'warning');
+      return false;
+    }
+
     const exists = wishlist.some((item) => item.id === product.id);
     if (exists) {
       setWishlist((prev) => prev.filter((item) => item.id !== product.id));
@@ -43,6 +63,7 @@ export function WishlistProvider({ children }) {
       setWishlist((prev) => [...prev, product]);
       showToast('Added to Wishlist!', 'success');
     }
+    return true;
   };
 
   const removeFromWishlist = (productId) => {

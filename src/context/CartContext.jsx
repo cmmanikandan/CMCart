@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
 import { commerceDb } from '../services/supabase/supabaseClient';
 
 const CartContext = createContext();
@@ -8,24 +9,17 @@ const SAVED_STORAGE_KEY = 'cmcart_saved_items_v2';
 
 export function CartProvider({ children }) {
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [cartItems, setCartItems] = useState(() => {
     try {
       const stored = localStorage.getItem(CART_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [
-        // Seeded initial item for instant preview
-        {
-          id: 'cart-init-1',
-          productId: 'prod-1',
-          name: 'Sony WH-1000XM5 Wireless Noise-Cancelling Headphones',
-          variant: 'Midnight Black',
-          price: 26990,
-          originalPrice: 34990,
-          quantity: 1,
-          image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&auto=format&fit=crop&q=80',
-          stock: 24
-        }
-      ];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Purge obsolete seeded mock items
+        return parsed.filter((item) => item.id !== 'cart-init-1');
+      }
+      return [];
     } catch {
       return [];
     }
@@ -45,11 +39,38 @@ export function CartProvider({ children }) {
     return cartItems.map((i) => i.id);
   });
 
+  // Purge products that were deleted or deactivated by admin from customer cart
+  useEffect(() => {
+    let isSubscribed = true;
+    commerceDb.getProducts().then((liveProducts) => {
+      if (!isSubscribed || !Array.isArray(liveProducts)) return;
+      const validIds = new Set(
+        liveProducts
+          .filter((p) => p.status !== 'inactive' && p.status !== 'deleted')
+          .map((p) => String(p.id))
+      );
+      setCartItems((prev) => {
+        const cleaned = prev.filter((item) => validIds.has(String(item.productId)));
+        if (cleaned.length !== prev.length) {
+          localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+        return cleaned;
+      });
+      setSavedForLater((prev) => {
+        const cleaned = prev.filter((item) => validIds.has(String(item.productId)));
+        if (cleaned.length !== prev.length) {
+          localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+        return cleaned;
+      });
+    }).catch((e) => console.warn('Cart product validation notice:', e));
+    return () => { isSubscribed = false; };
+  }, []);
+
   // Keep selectedItemIds in sync when cart items are added/removed
   useEffect(() => {
     setSelectedItemIds((prev) => {
       const currentIds = cartItems.map((i) => i.id);
-      // If newly added items exist, select them by default
       const newlyAdded = currentIds.filter((id) => !prev.includes(id));
       if (newlyAdded.length > 0) {
         return [...prev.filter((id) => currentIds.includes(id)), ...newlyAdded];
@@ -80,7 +101,13 @@ export function CartProvider({ children }) {
     setSelectedItemIds([]);
   };
 
+  // Add to cart - Enforces user login and adds active product
   const addToCart = (product, variant = null, quantity = 1) => {
+    if (!user) {
+      showToast('Please sign in to add items to your cart!', 'warning');
+      return false;
+    }
+
     const variantName = variant?.name || (typeof variant === 'string' ? variant : 'Default');
     const existingIndex = cartItems.findIndex(
       (item) => item.productId === product.id && item.variant === variantName
@@ -107,6 +134,7 @@ export function CartProvider({ children }) {
       setSelectedItemIds((prev) => [...prev, newItem.id]);
       showToast(`Added ${product.name} to Cart`, 'success');
     }
+    return true;
   };
 
   const removeFromCart = (cartItemId) => {
@@ -134,6 +162,10 @@ export function CartProvider({ children }) {
   };
 
   const moveToCart = (savedItemId) => {
+    if (!user) {
+      showToast('Please sign in to move items to your cart!', 'warning');
+      return false;
+    }
     const item = savedForLater.find((i) => i.id === savedItemId);
     if (!item) return;
     setSavedForLater((prev) => prev.filter((i) => i.id !== savedItemId));
@@ -203,7 +235,7 @@ export function CartProvider({ children }) {
   // Delivery: Free if subtotal > 999 or FREESHIP coupon
   const deliveryFee = subtotal === 0 || subtotal >= 999 || appliedCoupon?.code === 'FREESHIP' ? 0 : 99;
   
-  // Tax 18% GST display breakdown (typically included or computed)
+  // Tax 18% GST display breakdown
   const taxableAmount = Math.max(0, subtotal - couponDiscount);
   const taxAmount = Math.round(taxableAmount * 0.18);
   const totalAmount = taxableAmount + deliveryFee;
