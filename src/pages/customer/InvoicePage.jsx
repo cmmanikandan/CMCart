@@ -15,11 +15,13 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export function InvoicePage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAdmin } = useAuth();
   const fromAdmin = new URLSearchParams(location.search).get('from') === 'admin' || location.state?.from === 'admin';
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,10 +40,19 @@ export function InvoicePage() {
 
   useEffect(() => {
     commerceDb.getOrderById(id).then((ord) => {
-      setOrder(ord);
+      if (ord) {
+        const isOwner = !ord.user_id || ord.user_id === user?.uid || (ord.user_email && ord.user_email.toLowerCase() === user?.email?.toLowerCase());
+        if (!isAdmin && !fromAdmin && !isOwner) {
+          setOrder(null);
+        } else {
+          setOrder(ord);
+        }
+      } else {
+        setOrder(null);
+      }
       setLoading(false);
     });
-  }, [id]);
+  }, [id, user, isAdmin, fromAdmin]);
 
   // Adjust zoom on resize if on mobile
   useEffect(() => {

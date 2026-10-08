@@ -271,10 +271,20 @@ export function LoginPage() {
             </label>
           </div>
 
+          {/* New User Register Link */}
+          <div className="w-full text-center mt-3 pt-2">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              New to CMCart?{' '}
+              <Link to="/register" className="font-bold text-[#E63946] hover:underline">
+                Create an Account
+              </Link>
+            </p>
+          </div>
+
           {/* ==================================================
               SECURITY / TRUST BADGE
               ================================================== */}
-          <div className="w-full pt-5 mt-4 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] sm:text-xs text-neutral-400 dark:text-neutral-500">
+          <div className="w-full pt-4 mt-3 border-t border-neutral-100 dark:border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] sm:text-xs text-neutral-400 dark:text-neutral-500">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <span>256-bit Encrypted • Firebase & Google Protected</span>
           </div>

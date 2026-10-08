@@ -9,6 +9,22 @@ import { signInWithPopup, signOut } from 'firebase/auth';
 
 const AUTH_USER_KEY = 'cmcart_auth_user_v1';
 
+export const ADMIN_EMAILS = [
+  'admin@cmcart.com',
+  'manikandanprabhu37@gmail.com'
+];
+
+export const ADMIN_UIDS = [
+  '4nEoHgT24ofMMkvhZJdCbOMjJmy1'
+];
+
+export function isUserAdmin(uid, email) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  if (uid && ADMIN_UIDS.includes(uid)) return true;
+  if (cleanEmail && (ADMIN_EMAILS.includes(cleanEmail) || cleanEmail.endsWith('@admin.cmcart.com'))) return true;
+  return false;
+}
+
 export const authService = {
   // Get current user from storage - NO FAKE DEMO USER FALLBACK
   getCurrentUser() {
@@ -20,6 +36,10 @@ export const authService = {
         if (parsed?.uid === 'usr-customer-8812' || parsed?.email === 'customer@cmcart.com') {
           localStorage.removeItem(AUTH_USER_KEY);
           return null;
+        }
+        // Auto-assign admin role if matching configured Admin UID or Email
+        if (isUserAdmin(parsed?.uid, parsed?.email)) {
+          parsed.role = 'admin';
         }
         return parsed;
       }
@@ -60,22 +80,42 @@ export const authService = {
 
     const fbUser = result.user;
     const emailLower = (fbUser.email || '').toLowerCase().trim();
-    const isAdminUser = emailLower === 'admin@cmcart.com' || emailLower.endsWith('@admin.cmcart.com');
+    const isAdminUser = isUserAdmin(fbUser.uid, emailLower);
+    const existing = this.getCurrentUser();
+    const isSameUser = existing && (existing.email?.toLowerCase() === emailLower || existing.uid === fbUser.uid);
+
+    let customerData = null;
+    try {
+      const { supabase } = await import('../supabase/supabaseClient');
+      if (supabase && emailLower) {
+        const { data } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('email', emailLower)
+          .maybeSingle();
+        customerData = data;
+      }
+    } catch (e) {
+      // offline/fallback
+    }
 
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || '',
-      displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
-      phone: fbUser.phoneNumber || '',
-      role: isAdminUser ? 'admin' : 'customer',
+      displayName: (isSameUser ? existing?.displayName : null) || customerData?.full_name || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+      photoURL: (isSameUser ? existing?.photoURL : null) || customerData?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      phone: (isSameUser ? existing?.phone : '') || customerData?.phone || fbUser.phoneNumber || '',
+      gender: (isSameUser ? existing?.gender : '') || customerData?.gender || '',
+      age: (isSameUser ? existing?.age : null) || customerData?.age || null,
+      role: isAdminUser ? 'admin' : (isSameUser ? existing?.role : 'customer') || 'customer',
+      isProfileCompleted: isSameUser ? !!existing?.isProfileCompleted : (customerData ? !!customerData.is_profile_completed || !!customerData.gender : false),
       isEmailVerified: fbUser.emailVerified ?? true,
       privacy_policy_accepted: consentData.privacy_policy_accepted ?? true,
       terms_accepted: consentData.terms_accepted ?? true,
       privacy_policy_version: consentData.privacy_policy_version ?? '2026.1',
       terms_version: consentData.terms_version ?? '2026.1',
       accepted_at: consentData.accepted_at ?? new Date().toISOString(),
-      created_at: new Date().toISOString(),
+      created_at: (isSameUser ? existing?.created_at : null) || new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
@@ -92,6 +132,9 @@ export const authService = {
           full_name: appUser.displayName,
           phone: appUser.phone || null,
           avatar_url: appUser.photoURL || null,
+          gender: appUser.gender || null,
+          age: appUser.age || null,
+          is_profile_completed: appUser.isProfileCompleted,
           status: 'active',
           updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
@@ -107,15 +150,19 @@ export const authService = {
   async syncFirebaseUser(fbUser) {
     if (!fbUser) return null;
     const emailLower = (fbUser.email || '').toLowerCase().trim();
-    const isAdminUser = emailLower === 'admin@cmcart.com' || emailLower.endsWith('@admin.cmcart.com');
+    const isAdminUser = isUserAdmin(fbUser.uid, emailLower);
     const existing = this.getCurrentUser();
+    const isSameUser = existing && (existing.email?.toLowerCase() === emailLower || existing.uid === fbUser.uid);
 
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || existing?.email || '',
-      displayName: fbUser.displayName || existing?.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: fbUser.photoURL || existing?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
-      phone: fbUser.phoneNumber || existing?.phone || '',
+      displayName: (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
+      photoURL: (isSameUser ? existing?.photoURL : null) || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      phone: (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
+      gender: (isSameUser ? existing?.gender : '') || '',
+      age: (isSameUser ? existing?.age : null) || null,
+      isProfileCompleted: isSameUser ? !!existing?.isProfileCompleted : false,
       role: isAdminUser ? 'admin' : (existing?.role || 'customer'),
       isEmailVerified: fbUser.emailVerified ?? true,
       privacy_policy_accepted: existing?.privacy_policy_accepted ?? true,
@@ -136,7 +183,7 @@ export const authService = {
     await new Promise((r) => setTimeout(r, 400));
     const cleanEmail = email.trim().toLowerCase();
 
-    const isAdminUser = cleanEmail === 'admin@cmcart.com';
+    const isAdminUser = isUserAdmin(null, cleanEmail);
 
     const user = {
       uid: `usr-${Date.now()}`,
@@ -164,8 +211,11 @@ export const authService = {
       displayName: fullName.trim(),
       photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`,
       phone: phone.trim(),
+      gender: '',
+      age: null,
       role: 'customer',
       isEmailVerified: false,
+      isProfileCompleted: false,
       created_at: new Date().toISOString()
     };
 
@@ -211,6 +261,9 @@ export const authService = {
           full_name: updated.displayName,
           phone: updated.phone || null,
           avatar_url: updated.photoURL || null,
+          gender: updated.gender || null,
+          age: updated.age || null,
+          is_profile_completed: !!updated.isProfileCompleted,
           updated_at: new Date().toISOString()
         }, { onConflict: 'email' });
       }

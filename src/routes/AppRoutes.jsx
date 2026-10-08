@@ -67,7 +67,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/profile-wizard" element={<ProfileWizardPage />} />
       <Route path="/onboarding/profile-wizard" element={<ProfileWizardPage />} />
-      <Route path="/register" element={<Navigate to="/login" replace />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
 
       {/* Customer Storefront Routes */}

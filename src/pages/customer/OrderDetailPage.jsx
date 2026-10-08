@@ -19,12 +19,14 @@ import { Badge } from '../../components/ui/Badge';
 import { InvoiceModal } from '../../components/customer/InvoiceModal';
 import { PaymentStatusBadge } from '../../components/ui/PaymentStatusBadge';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
 
 export function OrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -33,10 +35,19 @@ export function OrderDetailPage() {
 
   useEffect(() => {
     commerceDb.getOrderById(id).then((ord) => {
-      setOrder(ord);
+      if (ord) {
+        const isOwner = !ord.user_id || ord.user_id === user?.uid || (ord.user_email && ord.user_email.toLowerCase() === user?.email?.toLowerCase());
+        if (!isAdmin && !isOwner) {
+          setOrder(null);
+        } else {
+          setOrder(ord);
+        }
+      } else {
+        setOrder(null);
+      }
       setLoading(false);
     });
-  }, [id]);
+  }, [id, user, isAdmin]);
 
   const handleBuyAgain = (item) => {
     addToCart(

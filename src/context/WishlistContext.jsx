@@ -10,12 +10,14 @@ export function WishlistProvider({ children }) {
   const { showToast } = useToast();
   const { user } = useAuth();
 
+  const getWishlistKey = (u) => (u?.uid ? `cmcart_wishlist_${u.uid}` : WISHLIST_KEY);
+
   const [wishlist, setWishlist] = useState(() => {
     try {
-      const stored = localStorage.getItem(WISHLIST_KEY);
+      const key = getWishlistKey(user);
+      const stored = localStorage.getItem(key);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Clear obsolete mock seed item
         return parsed.filter((item) => item.id !== 'prod-2');
       }
       return [];
@@ -23,6 +25,21 @@ export function WishlistProvider({ children }) {
       return [];
     }
   });
+
+  // Load wishlist when user changes
+  useEffect(() => {
+    try {
+      const key = getWishlistKey(user);
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        setWishlist(JSON.parse(stored).filter((item) => item.id !== 'prod-2'));
+      } else {
+        setWishlist([]);
+      }
+    } catch {
+      setWishlist([]);
+    }
+  }, [user?.uid]);
 
   // Purge products that were deleted or deactivated by admin from customer wishlist
   useEffect(() => {
@@ -37,17 +54,19 @@ export function WishlistProvider({ children }) {
       setWishlist((prev) => {
         const cleaned = prev.filter((item) => validIds.has(String(item.id)));
         if (cleaned.length !== prev.length) {
-          localStorage.setItem(WISHLIST_KEY, JSON.stringify(cleaned));
+          const key = getWishlistKey(user);
+          localStorage.setItem(key, JSON.stringify(cleaned));
         }
         return cleaned;
       });
     }).catch((e) => console.warn('Wishlist product validation notice:', e));
     return () => { isSubscribed = false; };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
-    localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist));
-  }, [wishlist]);
+    const key = getWishlistKey(user);
+    localStorage.setItem(key, JSON.stringify(wishlist));
+  }, [wishlist, user?.uid]);
 
   const toggleWishlist = (product) => {
     if (!user) {

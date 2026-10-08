@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authService } from '../services/firebase/firebaseAuth';
+import { authService, isUserAdmin } from '../services/firebase/firebaseAuth';
 import { auth } from '../services/firebase/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -9,7 +9,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => authService.getCurrentUser());
   const [loading, setLoading] = useState(false);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || isUserAdmin(user?.uid, user?.email);
 
   // Listen for live Firebase authentication session changes
   useEffect(() => {

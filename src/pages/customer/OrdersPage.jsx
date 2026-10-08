@@ -5,19 +5,22 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export function OrdersPage() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('All');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    commerceDb.getOrders().then((list) => {
+    setLoading(true);
+    commerceDb.getOrders(user).then((list) => {
       setOrders(list || []);
       setLoading(false);
     });
-  }, []);
+  }, [user]);
 
   const tabs = ['All', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
 

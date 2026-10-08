@@ -201,6 +201,30 @@ function saveStore(data) {
   }
 }
 
+function isStoreAdmin(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const uid = user.uid || user.id;
+  const email = (user.email || '').toLowerCase().trim();
+  if (uid === '4nEoHgT24ofMMkvhZJdCbOMjJmy1') return true;
+  if (email === 'admin@cmcart.com' || email === 'manikandanprabhu37@gmail.com' || email.endsWith('@admin.cmcart.com')) return true;
+  return false;
+}
+
+function getCurrentAuthUser() {
+  try {
+    const raw = localStorage.getItem('cmcart_auth_user_v1');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (isStoreAdmin(parsed)) {
+      parsed.role = 'admin';
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 // Commerce Service API
 export const commerceDb = {
   // PRODUCTS
@@ -376,9 +400,26 @@ export const commerceDb = {
   },
 
   // ORDERS
-  async getOrders() {
+  async getOrders(filterUser = null) {
     const store = getStore();
-    return store.orders;
+    if (filterUser === 'all' || filterUser?.all === true) {
+      return store.orders || [];
+    }
+    const target = filterUser || getCurrentAuthUser();
+    if (!target) return [];
+    if ((target.role === 'admin' || isStoreAdmin(target)) && !filterUser) {
+      return store.orders || [];
+    }
+    const uid = target.uid || target.id;
+    const email = (target.email || '').toLowerCase().trim();
+    return (store.orders || []).filter(o => {
+      if (uid && o.user_id && o.user_id === uid) return true;
+      if (email && o.user_email && o.user_email.toLowerCase() === email) return true;
+      if (uid && o.shipping_address?.user_id && o.shipping_address.user_id === uid) return true;
+      if (email && o.shipping_address?.user_email && o.shipping_address.user_email.toLowerCase() === email) return true;
+      if (email && o.shipping_address?.email && o.shipping_address.email.toLowerCase() === email) return true;
+      return false;
+    });
   },
 
   async getOrderById(id) {
@@ -388,6 +429,10 @@ export const commerceDb = {
 
   async createOrder(orderPayload) {
     const store = getStore();
+    const target = getCurrentAuthUser();
+    const uid = orderPayload.user_id || target?.uid || null;
+    const email = orderPayload.user_email || target?.email || null;
+
     const newOrder = {
       id: `ord-${Date.now().toString().slice(-5)}`,
       order_number: `CMC-2026-${Math.floor(10000 + Math.random() * 90000)}`,
@@ -396,6 +441,8 @@ export const commerceDb = {
       estimated_delivery: 'In 2-3 business days',
       tracking_number: `TRK-${Math.floor(1000000 + Math.random() * 9000000)}`,
       carrier: 'CMCart Express Logistics',
+      user_id: uid,
+      user_email: email,
       ...orderPayload,
       items: (orderPayload.items || []).map((item) => ({
         ...item,
@@ -423,9 +470,11 @@ export const commerceDb = {
     };
     store.orders.unshift(newOrder);
 
-    // Also add an automated notification
+    // Also add an automated notification scoped to this user
     store.notifications.unshift({
       id: `notif-${Date.now()}`,
+      user_id: uid,
+      user_email: email,
       title: `Order Confirmed! (#${newOrder.order_number})`,
       message: `Your order for ₹${newOrder.total_amount.toLocaleString('en-IN')} has been placed successfully.`,
       time: 'Just now',
@@ -611,20 +660,47 @@ export const commerceDb = {
   },
 
   // ADDRESSES
-  async getAddresses() {
+  async getAddresses(filterUser = null) {
     const store = getStore();
-    return store.addresses;
+    const target = filterUser || getCurrentAuthUser();
+    if (!target) {
+      // Guest: only addresses with no user assigned
+      return (store.addresses || []).filter(a => !a.user_id && !a.user_email);
+    }
+    const uid = target.uid || target.id;
+    const email = (target.email || '').toLowerCase().trim();
+    return (store.addresses || []).filter(a => {
+      if (uid && a.user_id && a.user_id === uid) return true;
+      if (email && a.user_email && a.user_email.toLowerCase() === email) return true;
+      return false;
+    });
   },
 
-  async addAddress(addr) {
+  async addAddress(addr, user = null) {
     const store = getStore();
+    const target = user || getCurrentAuthUser();
+    const uid = addr.user_id || target?.uid || null;
+    const email = (addr.user_email || target?.email || null)?.toLowerCase()?.trim() || null;
+
+    const userAddresses = (store.addresses || []).filter(a => {
+      if (uid && a.user_id && a.user_id === uid) return true;
+      if (email && a.user_email && a.user_email.toLowerCase() === email) return true;
+      return false;
+    });
+
     const newAddr = {
       id: `addr-${Date.now()}`,
-      is_default: store.addresses.length === 0,
+      user_id: uid,
+      user_email: email,
+      is_default: userAddresses.length === 0 || !!addr.is_default,
       ...addr
     };
+
     if (newAddr.is_default) {
-      store.addresses.forEach(a => a.is_default = false);
+      store.addresses.forEach(a => {
+        const isSame = (uid && a.user_id === uid) || (email && a.user_email?.toLowerCase() === email);
+        if (isSame) a.is_default = false;
+      });
     }
     store.addresses.push(newAddr);
     saveStore(store);
@@ -635,10 +711,17 @@ export const commerceDb = {
     const store = getStore();
     const idx = store.addresses.findIndex(a => a.id === id);
     if (idx !== -1) {
+      const existingAddr = store.addresses[idx];
+      const uid = existingAddr.user_id || updates.user_id;
+      const email = (existingAddr.user_email || updates.user_email)?.toLowerCase()?.trim();
+
       if (updates.is_default) {
-        store.addresses.forEach(a => a.is_default = false);
+        store.addresses.forEach(a => {
+          const isSame = (uid && a.user_id === uid) || (email && a.user_email?.toLowerCase() === email);
+          if (isSame) a.is_default = false;
+        });
       }
-      store.addresses[idx] = { ...store.addresses[idx], ...updates };
+      store.addresses[idx] = { ...existingAddr, ...updates };
       saveStore(store);
       return store.addresses[idx];
     }
@@ -653,9 +736,21 @@ export const commerceDb = {
   },
 
   // NOTIFICATIONS
-  async getNotifications() {
+  async getNotifications(filterUser = null) {
     const store = getStore();
-    return store.notifications;
+    const target = filterUser || getCurrentAuthUser();
+    if (!target) {
+      // Guest only sees broadcast notifications
+      return (store.notifications || []).filter(n => !n.user_id && !n.user_email);
+    }
+    const uid = target.uid || target.id;
+    const email = (target.email || '').toLowerCase().trim();
+    return (store.notifications || []).filter(n => {
+      if (!n.user_id && !n.user_email) return true;
+      if (uid && n.user_id && n.user_id === uid) return true;
+      if (email && n.user_email && n.user_email.toLowerCase() === email) return true;
+      return false;
+    });
   },
 
   async markNotificationAsRead(id) {

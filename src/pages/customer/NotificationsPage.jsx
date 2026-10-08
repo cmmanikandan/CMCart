@@ -4,20 +4,23 @@ import { Bell, CheckCheck, Trash2, ArrowLeft, ArrowRight, Tag, Zap, Truck, X } f
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
 export function NotificationsPage() {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   useEffect(() => {
     loadNotifs();
-  }, []);
+  }, [user]);
 
   const loadNotifs = () => {
-    commerceDb.getNotifications().then((list) => {
-      setNotifications(list);
+    setLoading(true);
+    commerceDb.getNotifications(user).then((list) => {
+      setNotifications(list || []);
       setLoading(false);
     });
   };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Phone, ArrowLeft, Camera } from 'lucide-react';
+import { User, Mail, Phone, ArrowLeft, Camera, Calendar } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -14,6 +14,8 @@ export function EditProfilePage() {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [gender, setGender] = useState(user?.gender || 'Male');
+  const [age, setAge] = useState(user?.age ? String(user.age) : '');
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
   const [loading, setLoading] = useState(false);
 
@@ -34,11 +36,14 @@ export function EditProfilePage() {
     e.preventDefault();
     setLoading(true);
     try {
+      const parsedAge = age ? parseInt(age, 10) : null;
       await updateProfile({
         displayName,
         email,
         phone,
-        photoURL
+        photoURL,
+        gender,
+        age: parsedAge
       });
       showToast('Profile updated successfully!', 'success');
       navigate('/profile');
@@ -126,6 +131,48 @@ export function EditProfilePage() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl pl-10 pr-4 py-2.5"
+              />
+            </div>
+          </div>
+
+          {/* Gender */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+              Gender
+            </label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {['Male', 'Female', 'Other'].map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGender(g)}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    gender === g
+                      ? 'border-[#E63946] bg-rose-50 dark:bg-rose-950/40 text-[#E63946]'
+                      : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 text-neutral-700 dark:text-neutral-300'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Age */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+              Age (Years)
+            </label>
+            <div className="relative">
+              <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                placeholder="e.g. 25"
+                className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-semibold"
               />
             </div>
           </div>

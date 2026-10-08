@@ -143,17 +143,26 @@ export function ProfilePage() {
             {user?.phone && (
               <p className="text-xs text-neutral-400 mt-0.5">{user.phone}</p>
             )}
+
+            {/* Gender and Age Badges */}
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200/80 dark:border-neutral-700">
+                <span className="text-neutral-400 font-medium">Gender:</span>
+                <span className="capitalize font-bold text-neutral-800 dark:text-neutral-100">
+                  {user?.gender || 'Not specified'}
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200/80 dark:border-neutral-700">
+                <span className="text-neutral-400 font-medium">Age:</span>
+                <span className="font-bold text-neutral-800 dark:text-neutral-100">
+                  {user?.age ? `${user.age} yrs` : 'Not specified'}
+                </span>
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center flex-wrap gap-2">
-          <Link
-            to="/profile-wizard"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-[#E63946] border border-rose-200 dark:border-rose-900/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Profile Wizard</span>
-          </Link>
           <Link
             to="/profile/edit"
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
@@ -170,6 +179,53 @@ export function ProfilePage() {
               <span>Admin Portal</span>
             </Link>
           )}
+        </div>
+      </div>
+
+      {/* Personal Info Card with Gender & Age */}
+      <div className="bg-white dark:bg-[#181818] p-5 sm:p-6 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-xs">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
+            <User className="w-4 h-4 text-[#E63946]" />
+            Personal Details
+          </h2>
+          <Link
+            to="/profile/edit"
+            className="text-xs font-bold text-[#E63946] hover:underline flex items-center gap-1"
+          >
+            <Edit className="w-3 h-3" />
+            <span>Edit</span>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-800">
+            <span className="text-[11px] text-neutral-400 font-medium block">Full Name</span>
+            <span className="font-bold text-neutral-900 dark:text-neutral-100 truncate block mt-0.5">
+              {user?.displayName || 'Not provided'}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-800">
+            <span className="text-[11px] text-neutral-400 font-medium block">Gender</span>
+            <span className="font-bold text-neutral-900 dark:text-neutral-100 capitalize block mt-0.5">
+              {user?.gender || 'Not specified'}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-800">
+            <span className="text-[11px] text-neutral-400 font-medium block">Age</span>
+            <span className="font-bold text-neutral-900 dark:text-neutral-100 block mt-0.5">
+              {user?.age ? `${user.age} Years` : 'Not specified'}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-100 dark:border-neutral-800">
+            <span className="text-[11px] text-neutral-400 font-medium block">Mobile Phone</span>
+            <span className="font-bold text-neutral-900 dark:text-neutral-100 truncate block mt-0.5">
+              {user?.phone || 'Not provided'}
+            </span>
+          </div>
         </div>
       </div>
 

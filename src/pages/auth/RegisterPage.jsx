@@ -27,7 +27,7 @@ export function RegisterPage() {
     try {
       await register(fullName, email, password, phone);
       showToast('Account registered successfully! Welcome to CMCart.', 'success');
-      navigate('/verify-email?email=' + encodeURIComponent(email));
+      navigate('/profile-wizard');
     } catch {
       showToast('Registration failed', 'error');
     } finally {

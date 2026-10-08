@@ -100,12 +100,13 @@ export function CheckoutPage() {
   const [editingAddr, setEditingAddr] = useState(null);
 
   useEffect(() => {
-    commerceDb.getAddresses().then((list) => {
-      setAddresses(list);
-      const defaultAddr = list.find((a) => a.is_default) || list[0];
+    commerceDb.getAddresses(user).then((list) => {
+      const addrList = list || [];
+      setAddresses(addrList);
+      const defaultAddr = addrList.find((a) => a.is_default) || addrList[0];
       if (defaultAddr) setSelectedAddressId(defaultAddr.id);
     });
-  }, []);
+  }, [user]);
 
   const handleApplyCoupon = async (e) => {
     e.preventDefault();
@@ -122,7 +123,11 @@ export function CheckoutPage() {
       showToast('Please fill all mandatory fields', 'error');
       return;
     }
-    const created = await commerceDb.addAddress(newAddr);
+    const created = await commerceDb.addAddress({
+      ...newAddr,
+      user_id: user?.uid,
+      user_email: user?.email
+    }, user);
     setAddresses([...addresses, created]);
     setSelectedAddressId(created.id);
     setShowAddAddressModal(false);
@@ -141,7 +146,11 @@ export function CheckoutPage() {
       showToast('Please fill all required address fields', 'error');
       return;
     }
-    const updated = await commerceDb.updateAddress(editingAddr.id, editingAddr);
+    const updated = await commerceDb.updateAddress(editingAddr.id, {
+      ...editingAddr,
+      user_id: user?.uid,
+      user_email: user?.email
+    });
     if (updated) {
       setAddresses((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       setShowEditAddressModal(false);
@@ -213,6 +222,9 @@ export function CheckoutPage() {
     setPlacingOrder(true);
     try {
       const newOrder = await commerceDb.createOrder({
+        user_id: user?.uid || null,
+        user_email: user?.email || null,
+        user_name: user?.displayName || selectedAddress.full_name || null,
         shipping_address: selectedAddress,
         items: checkoutItems.map((item) => ({
           id: item.id,

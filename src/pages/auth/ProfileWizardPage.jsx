@@ -15,7 +15,8 @@ import {
   Home,
   Briefcase,
   Compass,
-  ShoppingBag
+  ShoppingBag,
+  Calendar
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '../../components/ui/BrandLogo';
@@ -59,7 +60,8 @@ export function ProfileWizardPage() {
     if (!user?.phone) return '';
     return user.phone.replace('+91', '').replace(/\s+/g, '').trim();
   });
-  const [gender, setGender] = useState('Male'); // 'Male' | 'Female' | 'Other'
+  const [gender, setGender] = useState(user?.gender || 'Male'); // 'Male' | 'Female' | 'Other'
+  const [age, setAge] = useState(user?.age ? String(user.age) : '');
 
   // Step 2: Indian Address Format
   const [receiverName, setReceiverName] = useState(user?.displayName || '');
@@ -141,6 +143,12 @@ export function ProfileWizardPage() {
       return;
     }
 
+    const numAge = parseInt(age, 10);
+    if (!age || isNaN(numAge) || numAge < 1 || numAge > 120) {
+      showToast('Please enter a valid age between 1 and 120', 'error');
+      return;
+    }
+
     setReceiverName(fullName.trim());
     setReceiverPhone(cleanMobile);
     setStep(2);
@@ -173,8 +181,10 @@ export function ProfileWizardPage() {
       }`;
       const fullPhone = `+91 ${mobileNumber.replace(/\D/g, '')}`;
 
-      // 1. Save Address to database
+      // 1. Save Address to database scoped to current user
       await commerceDb.addAddress({
+        user_id: user?.uid || null,
+        user_email: user?.email || null,
         full_name: receiverName.trim() || fullName.trim(),
         phone: receiverPhone ? `+91 ${receiverPhone.replace(/\D/g, '')}` : fullPhone,
         address_line: fullAddressString,
@@ -183,14 +193,15 @@ export function ProfileWizardPage() {
         pincode: cleanPin,
         type: addressType,
         is_default: isDefault
-      });
+      }, user);
 
-      // 2. Update user profile with DP, name, mobile with +91, gender
+      // 2. Update user profile with DP, name, mobile with +91, gender, age
       await updateProfile({
         displayName: fullName.trim(),
         photoURL: avatarUrl,
         phone: fullPhone,
         gender,
+        age: parseInt(age, 10) || null,
         isProfileCompleted: true
       });
 
@@ -381,6 +392,26 @@ export function ProfileWizardPage() {
                       <span>{g.label}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Age Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                  Age (Years) <span className="text-[#E63946]">*</span>
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    required
+                    value={age}
+                    onChange={(e) => setAge(e.target.value)}
+                    placeholder="Enter your age (e.g. 24)"
+                    className="w-full bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-2xl pl-10 pr-4 py-3 text-sm font-semibold focus:outline-hidden focus:border-[#E63946] focus:bg-white dark:focus:bg-[#202020] transition-all"
+                  />
                 </div>
               </div>
 

@@ -11,12 +11,15 @@ export function CartProvider({ children }) {
   const { showToast } = useToast();
   const { user } = useAuth();
 
+  const getCartKey = (u) => (u?.uid ? `cmcart_cart_${u.uid}` : CART_STORAGE_KEY);
+  const getSavedKey = (u) => (u?.uid ? `cmcart_saved_${u.uid}` : SAVED_STORAGE_KEY);
+
   const [cartItems, setCartItems] = useState(() => {
     try {
-      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      const key = getCartKey(user);
+      const stored = localStorage.getItem(key);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Purge obsolete seeded mock items
         return parsed.filter((item) => item.id !== 'cart-init-1');
       }
       return [];
@@ -27,7 +30,8 @@ export function CartProvider({ children }) {
 
   const [savedForLater, setSavedForLater] = useState(() => {
     try {
-      const stored = localStorage.getItem(SAVED_STORAGE_KEY);
+      const key = getSavedKey(user);
+      const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -38,6 +42,22 @@ export function CartProvider({ children }) {
   const [selectedItemIds, setSelectedItemIds] = useState(() => {
     return cartItems.map((i) => i.id);
   });
+
+  // Switch cart storage when user changes
+  useEffect(() => {
+    try {
+      const cKey = getCartKey(user);
+      const cStored = localStorage.getItem(cKey);
+      setCartItems(cStored ? JSON.parse(cStored).filter((i) => i.id !== 'cart-init-1') : []);
+
+      const sKey = getSavedKey(user);
+      const sStored = localStorage.getItem(sKey);
+      setSavedForLater(sStored ? JSON.parse(sStored) : []);
+    } catch {
+      setCartItems([]);
+      setSavedForLater([]);
+    }
+  }, [user?.uid]);
 
   // Purge products that were deleted or deactivated by admin from customer cart
   useEffect(() => {
@@ -52,20 +72,22 @@ export function CartProvider({ children }) {
       setCartItems((prev) => {
         const cleaned = prev.filter((item) => validIds.has(String(item.productId)));
         if (cleaned.length !== prev.length) {
-          localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cleaned));
+          const key = getCartKey(user);
+          localStorage.setItem(key, JSON.stringify(cleaned));
         }
         return cleaned;
       });
       setSavedForLater((prev) => {
         const cleaned = prev.filter((item) => validIds.has(String(item.productId)));
         if (cleaned.length !== prev.length) {
-          localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(cleaned));
+          const key = getSavedKey(user);
+          localStorage.setItem(key, JSON.stringify(cleaned));
         }
         return cleaned;
       });
     }).catch((e) => console.warn('Cart product validation notice:', e));
     return () => { isSubscribed = false; };
-  }, []);
+  }, [user?.uid]);
 
   // Keep selectedItemIds in sync when cart items are added/removed
   useEffect(() => {
@@ -80,12 +102,14 @@ export function CartProvider({ children }) {
   }, [cartItems]);
 
   useEffect(() => {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
-  }, [cartItems]);
+    const key = getCartKey(user);
+    localStorage.setItem(key, JSON.stringify(cartItems));
+  }, [cartItems, user?.uid]);
 
   useEffect(() => {
-    localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify(savedForLater));
-  }, [savedForLater]);
+    const key = getSavedKey(user);
+    localStorage.setItem(key, JSON.stringify(savedForLater));
+  }, [savedForLater, user?.uid]);
 
   const toggleSelectItem = (cartItemId) => {
     setSelectedItemIds((prev) =>
