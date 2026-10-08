@@ -24,5 +24,22 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
+-- 3. Enable Supabase Realtime WebSocket publication for instant multi-device sync
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END $$;
+
 -- Verification query
-SELECT 'Success! CMCart database tables are now fully open for live multi-device sync.' AS status;
+SELECT 'Success! CMCart database tables & Realtime channels are now fully open for live multi-device sync.' AS status;

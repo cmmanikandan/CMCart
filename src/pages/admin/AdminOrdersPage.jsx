@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { PaymentStatusBadge } from '../../components/ui/PaymentStatusBadge';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { realtimeOrders } from '../../services/realtime/realtimeService';
 import { useToast } from '../../context/ToastContext';
 
 export function AdminOrdersPage() {
@@ -31,7 +32,13 @@ export function AdminOrdersPage() {
     loadOrders();
     const handleUpdate = () => loadOrders();
     window.addEventListener('cmcart_dataset_updated', handleUpdate);
-    return () => window.removeEventListener('cmcart_dataset_updated', handleUpdate);
+    const unsubscribe = realtimeOrders.subscribeToAllOrders(() => {
+      loadOrders();
+    });
+    return () => {
+      window.removeEventListener('cmcart_dataset_updated', handleUpdate);
+      unsubscribe();
+    };
   }, []);
 
   const loadOrders = async () => {

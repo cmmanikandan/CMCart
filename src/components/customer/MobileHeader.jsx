@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { PWAInstallButton } from '../ui/PWAInstallButton';
+import { UserAvatar } from '../ui/UserAvatar';
 import { useCart } from '../../context/CartContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -173,8 +174,9 @@ export function MobileHeader() {
               </Link>
             ) : (
               <Link to="/profile" className="ml-1 shrink-0 p-0.5">
-                <img
-                  src={user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}
+                <UserAvatar
+                  src={user.photoURL}
+                  name={user.displayName}
                   alt={user.displayName || 'Profile'}
                   className="w-7 h-7 rounded-full object-cover border-2 border-[#E63946]"
                 />

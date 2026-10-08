@@ -20,6 +20,7 @@ import {
 import { BrandLogo } from '../ui/BrandLogo';
 import { SearchBar } from '../ui/SearchBar';
 import { PWAInstallButton } from '../ui/PWAInstallButton';
+import { UserAvatar } from '../ui/UserAvatar';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
@@ -140,9 +141,10 @@ export function Navbar() {
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 py-1.5 px-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer transition-colors select-none"
               >
-                <img
-                  src={user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'}
-                  alt={user.displayName}
+                <UserAvatar
+                  src={user.photoURL}
+                  name={user.displayName}
+                  alt={user.displayName || 'User'}
                   className="w-8 h-8 rounded-full object-cover border border-neutral-200 dark:border-neutral-700"
                 />
                 <div className="hidden xl:block text-left">

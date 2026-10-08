@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 export function ProfilePage() {
   const { user, isAdmin, logout } = useAuth();
@@ -124,9 +125,10 @@ export function ProfilePage() {
       <div className="bg-white dark:bg-[#181818] p-5 sm:p-7 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-5 shadow-xs">
         <div className="flex items-center gap-4">
           <div className="relative">
-            <img
-              src={user?.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-              alt={user?.displayName}
+            <UserAvatar
+              src={user?.photoURL}
+              alt={user?.displayName || 'User Profile'}
+              name={user?.displayName}
               className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl object-cover border-2 border-[#E63946]"
             />
           </div>

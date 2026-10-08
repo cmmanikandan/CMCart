@@ -19,6 +19,7 @@ import { Badge } from '../../components/ui/Badge';
 import { InvoiceModal } from '../../components/customer/InvoiceModal';
 import { PaymentStatusBadge } from '../../components/ui/PaymentStatusBadge';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { realtimeOrders } from '../../services/realtime/realtimeService';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
@@ -34,20 +35,42 @@ export function OrderDetailPage() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    commerceDb.getOrderById(id).then((ord) => {
-      if (ord) {
-        const isOwner = !ord.user_id || ord.user_id === user?.uid || (ord.user_email && ord.user_email.toLowerCase() === user?.email?.toLowerCase());
-        if (!isAdmin && !isOwner) {
-          setOrder(null);
+    let isMounted = true;
+
+    const fetchOrder = () => {
+      commerceDb.getOrderById(id).then((ord) => {
+        if (!isMounted) return;
+        if (ord) {
+          const isOwner = !ord.user_id || ord.user_id === user?.uid || (ord.user_email && ord.user_email.toLowerCase() === user?.email?.toLowerCase());
+          if (!isAdmin && !isOwner) {
+            setOrder(null);
+          } else {
+            setOrder(ord);
+          }
         } else {
-          setOrder(ord);
+          setOrder(null);
         }
-      } else {
-        setOrder(null);
+        setLoading(false);
+      });
+    };
+
+    fetchOrder();
+
+    // Subscribe to live WebSocket & Supabase real-time status changes
+    const unsubscribe = realtimeOrders.subscribeToOrder(id, (update) => {
+      if (!isMounted) return;
+      console.log('[OrderDetailPage] Live order update received:', update);
+      fetchOrder();
+      if (update.status) {
+        showToast(`Order status updated to "${update.status}"`, 'info');
       }
-      setLoading(false);
     });
-  }, [id, user, isAdmin]);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [id, user, isAdmin, showToast]);
 
   const handleBuyAgain = (item) => {
     addToCart(

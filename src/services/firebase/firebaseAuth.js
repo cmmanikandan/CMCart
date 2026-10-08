@@ -37,6 +37,10 @@ export const authService = {
           localStorage.removeItem(AUTH_USER_KEY);
           return null;
         }
+        // Ensure photoURL is clean without any metadata fragment
+        if (parsed?.photoURL && typeof parsed.photoURL === 'string' && parsed.photoURL.includes('#cm=')) {
+          parsed.photoURL = parsed.photoURL.split('#cm=')[0];
+        }
         // Auto-assign admin role if matching configured Admin UID or Email
         if (isUserAdmin(parsed?.uid, parsed?.email)) {
           parsed.role = 'admin';
@@ -126,11 +130,17 @@ export const authService = {
       } catch (e) { /* ignore */ }
     }
 
+    const cleanGooglePhoto = (fbUser.photoURL || '').split('#cm=')[0].trim();
+    const cleanDbPhoto = (dbProfile?.avatar_url || '').split('#cm=')[0].trim();
+    const cleanCloudPhoto = (cloudData?.photoURL || '').split('#cm=')[0].trim();
+    const cleanExistingPhoto = (existing?.photoURL || '').split('#cm=')[0].trim();
+    const chosenPhoto = cleanGooglePhoto || cleanCloudPhoto || (isSameUser ? cleanExistingPhoto : '') || cleanDbPhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`;
+
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || '',
       displayName: dbProfile?.full_name || cloudData?.displayName || (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || dbProfile?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      photoURL: chosenPhoto,
       phone: dbProfile?.phone || cloudData?.phone || (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
       gender: dbMeta?.g || cloudData?.gender || (isSameUser ? existing?.gender : '') || '',
       age: dbMeta?.a || cloudData?.age || (isSameUser ? existing?.age : null) || null,
@@ -232,11 +242,17 @@ export const authService = {
       } catch (e) { /* ignore */ }
     }
 
+    const cleanGooglePhoto = (fbUser.photoURL || '').split('#cm=')[0].trim();
+    const cleanDbPhoto = (dbProfile?.avatar_url || '').split('#cm=')[0].trim();
+    const cleanCloudPhoto = (cloudData?.photoURL || '').split('#cm=')[0].trim();
+    const cleanExistingPhoto = (existing?.photoURL || '').split('#cm=')[0].trim();
+    const chosenPhoto = cleanGooglePhoto || cleanCloudPhoto || (isSameUser ? cleanExistingPhoto : '') || cleanDbPhoto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`;
+
     const appUser = {
       uid: fbUser.uid,
       email: fbUser.email || existing?.email || '',
       displayName: dbProfile?.full_name || cloudData?.displayName || (isSameUser ? existing?.displayName : null) || fbUser.displayName || fbUser.email?.split('@')[0] || 'Customer',
-      photoURL: cloudData?.photoURL || (isSameUser ? existing?.photoURL : null) || dbProfile?.avatar_url || fbUser.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fbUser.displayName || 'Customer')}`,
+      photoURL: chosenPhoto,
       phone: dbProfile?.phone || cloudData?.phone || (isSameUser ? existing?.phone : '') || fbUser.phoneNumber || '',
       gender: dbMeta?.g || cloudData?.gender || (isSameUser ? existing?.gender : '') || '',
       age: dbMeta?.a || cloudData?.age || (isSameUser ? existing?.age : null) || null,
@@ -326,7 +342,11 @@ export const authService = {
   async updateProfile(updates) {
     const current = this.getCurrentUser();
     if (!current) return null;
-    const updated = { ...current, ...updates, updated_at: new Date().toISOString() };
+    const cleanUpdates = { ...updates };
+    if (cleanUpdates.photoURL && typeof cleanUpdates.photoURL === 'string') {
+      cleanUpdates.photoURL = cleanUpdates.photoURL.split('#cm=')[0].trim();
+    }
+    const updated = { ...current, ...cleanUpdates, updated_at: new Date().toISOString() };
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
 
     // Sync to Cloudinary cloud & Firebase Auth for cross-device persistence

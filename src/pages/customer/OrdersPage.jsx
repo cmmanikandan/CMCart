@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { realtimeOrders } from '../../services/realtime/realtimeService';
 import { useAuth } from '../../context/AuthContext';
 
 export function OrdersPage() {
@@ -15,11 +16,27 @@ export function OrdersPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setLoading(true);
-    commerceDb.getOrders(user).then((list) => {
-      setOrders(list || []);
-      setLoading(false);
+    let isMounted = true;
+    const fetchOrders = () => {
+      commerceDb.getOrders(user).then((list) => {
+        if (isMounted) {
+          setOrders(list || []);
+          setLoading(false);
+        }
+      });
+    };
+
+    fetchOrders();
+
+    // Subscribe to live WebSocket & Supabase real-time status updates
+    const unsubscribe = realtimeOrders.subscribeToAllOrders(() => {
+      if (isMounted) fetchOrders();
     });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [user]);
 
   const tabs = ['All', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];

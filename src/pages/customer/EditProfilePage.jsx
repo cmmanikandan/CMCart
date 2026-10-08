@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, Mail, Phone, ArrowLeft, Camera, Calendar } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { uploadImageToCloudinary } from '../../services/cloudinary/cloudinaryService';
@@ -70,9 +71,10 @@ export function EditProfilePage() {
         {/* Profile Avatar Upload */}
         <div className="flex flex-col items-center mb-8">
           <div className="relative">
-            <img
-              src={photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-              alt={displayName}
+            <UserAvatar
+              src={photoURL}
+              name={displayName}
+              alt={displayName || 'Profile Avatar'}
               className="w-24 h-24 rounded-full object-cover border-4 border-neutral-100 dark:border-neutral-800"
             />
             <label className="absolute bottom-0 right-0 p-2 rounded-full bg-[#E63946] text-white hover:bg-[#C92332] shadow-md cursor-pointer transition-colors">

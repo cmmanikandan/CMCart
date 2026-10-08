@@ -27,6 +27,7 @@ import {
   PanelLeftOpen
 } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
+import { UserAvatar } from '../components/ui/UserAvatar';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -195,9 +196,10 @@ export function AdminLayout() {
             }`}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <img
-                src={user?.photoURL || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100'}
+              <UserAvatar
+                src={user?.photoURL}
                 alt="Admin"
+                name={user?.displayName || 'Admin'}
                 className="w-7 h-7 rounded-full object-cover shrink-0"
               />
               {!isCollapsed && (

@@ -775,7 +775,46 @@ export const commerceDb = {
 
   async getOrderById(id) {
     const store = getStore();
-    return store.orders.find(o => o.id === id || o.order_number === id) || null;
+    let found = store.orders.find(o => o.id === id || o.order_number === id);
+
+    // Also fetch fresh from Supabase PostgreSQL to ensure latest live status
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        const { data: dbo, error } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .or(`id.eq.${id},order_number.eq.${id}`)
+          .maybeSingle();
+
+        if (dbo && !error) {
+          const transformed = {
+            ...dbo,
+            items: Array.isArray(dbo.order_items) && dbo.order_items.length > 0 ? dbo.order_items.map(i => ({
+              id: i.id,
+              name: i.product_name,
+              product_name: i.product_name,
+              image: i.product_image,
+              unit_price: Number(i.unit_price),
+              quantity: Number(i.quantity),
+              total: Number(i.total_price),
+              selected_options: i.selected_options
+            })) : (dbo.items || found?.items || [])
+          };
+
+          const existIdx = store.orders.findIndex(o => o.id === dbo.id || o.order_number === dbo.order_number);
+          if (existIdx !== -1) {
+            store.orders[existIdx] = { ...store.orders[existIdx], ...transformed };
+          } else {
+            store.orders.unshift(transformed);
+          }
+          saveStore(store);
+          return store.orders[existIdx !== -1 ? existIdx : 0];
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    return found || null;
   },
 
   async createOrder(orderPayload) {
@@ -892,27 +931,73 @@ export const commerceDb = {
 
   async updateOrderStatus(orderId, newStatus) {
     const store = getStore();
-    const order = store.orders.find(o => o.id === orderId);
-    if (!order) return null;
-
-    order.status = newStatus;
+    const order = store.orders.find(o => o.id === orderId || o.order_number === orderId);
 
     // Update timeline step completion
     const stepOrder = ['Order Placed', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered'];
     const currentIdx = stepOrder.indexOf(newStatus);
 
+    let updatedTimeline = order?.timeline || [];
+    if (!Array.isArray(updatedTimeline)) updatedTimeline = [];
+
     if (currentIdx !== -1) {
-      order.timeline.forEach((step, idx) => {
+      updatedTimeline.forEach((step, idx) => {
         if (idx <= currentIdx) {
           step.completed = true;
           if (!step.time || step.time.includes('Pending')) {
-            step.time = 'Updated just now';
+            step.time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           }
         }
       });
     }
 
-    saveStore(store);
+    if (newStatus === 'Cancelled') {
+      updatedTimeline.push({
+        status: 'Cancelled',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        completed: true,
+        note: 'Order cancelled'
+      });
+    }
+
+    if (order) {
+      order.status = newStatus;
+      order.timeline = updatedTimeline;
+      order.updated_at = new Date().toISOString();
+      saveStore(store);
+    }
+
+    // 1. Update Supabase PostgreSQL live
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        await supabase
+          .from('orders')
+          .update({
+            status: newStatus,
+            timeline: updatedTimeline,
+            updated_at: new Date().toISOString()
+          })
+          .or(`id.eq.${orderId},order_number.eq.${orderId}`);
+      }
+    } catch (e) {
+      console.warn('Supabase order status update note:', e?.message);
+    }
+
+    // 2. Broadcast via WebSocket, Supabase Channel, and Window Event
+    import('../realtime/realtimeService').then(({ realtimeOrders }) => {
+      realtimeOrders.broadcastStatusChange(orderId, newStatus, order);
+    }).catch(() => {});
+
+    // 3. Sync to user cloud backup
+    if (order?.user_id) {
+      import('../cloud/cloudSyncService').then(({ saveUserToCloud }) => {
+        const userOrders = store.orders.filter(o => o.user_id === order.user_id);
+        const addresses = store.addresses.filter(a => a.user_id === order.user_id);
+        saveUserToCloud({ uid: order.user_id, orders: userOrders, addresses });
+      }).catch(() => {});
+    }
+
     return order;
   },
 
@@ -935,6 +1020,29 @@ export const commerceDb = {
     });
 
     saveStore(store);
+
+    // Update Supabase PostgreSQL live
+    try {
+      const { supabase } = await import('./supabaseInit');
+      if (supabase) {
+        await supabase
+          .from('orders')
+          .update({
+            payment_status: 'Completed',
+            is_paid: true,
+            cod_collected: true,
+            timeline: order.timeline,
+            updated_at: new Date().toISOString()
+          })
+          .or(`id.eq.${orderId},order_number.eq.${orderId}`);
+      }
+    } catch (e) { /* ignore */ }
+
+    // Broadcast via realtime
+    import('../realtime/realtimeService').then(({ realtimeOrders }) => {
+      realtimeOrders.broadcastStatusChange(orderId, order.status, order);
+    }).catch(() => {});
+
     return order;
   },
 

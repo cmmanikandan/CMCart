@@ -28,6 +28,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ShippingLabelModal } from '../../components/admin/ShippingLabelModal';
 import { PaymentStatusBadge } from '../../components/ui/PaymentStatusBadge';
 import { commerceDb } from '../../services/supabase/supabaseClient';
+import { realtimeOrders } from '../../services/realtime/realtimeService';
 import { useToast } from '../../context/ToastContext';
 
 export function AdminOrderDetailPage() {
@@ -119,6 +120,12 @@ export function AdminOrderDetailPage() {
 
   useEffect(() => {
     loadOrder();
+    const unsubscribe = realtimeOrders.subscribeToOrder(id, () => {
+      loadOrder();
+    });
+    return () => {
+      unsubscribe();
+    };
   }, [id]);
 
   const loadOrder = async () => {
