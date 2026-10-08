@@ -63,9 +63,13 @@ export function LoginPage() {
         terms_version: '2026.1'
       };
 
-      await loginWithGoogle(consentData);
+      const loggedUser = await loginWithGoogle(consentData);
       showToast('Signed in successfully with Google!', 'success');
-      navigate(from, { replace: true });
+      if (!loggedUser?.isProfileCompleted && (from === '/home' || from === '/')) {
+        navigate('/profile-wizard', { replace: true });
+      } else {
+        navigate(from, { replace: true });
+      }
     } catch (err) {
       console.error('Google Sign-In Error:', err);
       setAuthError(err.message || 'Unable to sign in with Google. Please try again.');

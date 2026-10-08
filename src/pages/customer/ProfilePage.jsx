@@ -13,7 +13,8 @@ import {
   ShieldAlert,
   Edit,
   User,
-  ShoppingBag
+  ShoppingBag,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
@@ -145,12 +146,19 @@ export function ProfilePage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
+          <Link
+            to="/profile-wizard"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-rose-50 dark:bg-rose-950/40 text-[#E63946] border border-rose-200 dark:border-rose-900/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Profile Wizard</span>
+          </Link>
           <Link
             to="/profile/edit"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
           >
-            <Edit className="w-3.5 h-3.5 text-[#E63946]" />
+            <Edit className="w-3.5 h-3.5 text-neutral-500" />
             <span>Edit Profile</span>
           </Link>
           {isAdmin && (
