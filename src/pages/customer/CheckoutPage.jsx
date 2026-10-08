@@ -119,19 +119,54 @@ export function CheckoutPage() {
 
   const handleSaveNewAddress = async (e) => {
     e.preventDefault();
-    if (!newAddr.full_name || !newAddr.phone || !newAddr.address_line) {
-      showToast('Please fill all mandatory fields', 'error');
+    const cleanName = (newAddr.full_name || '').trim();
+    const cleanPhone = (newAddr.phone || '').replace(/\D/g, '');
+    const cleanLine = (newAddr.address_line || '').trim();
+    const cleanCity = (newAddr.city || '').trim();
+    const cleanState = (newAddr.state || '').trim();
+    const cleanPin = (newAddr.pincode || '').replace(/\D/g, '');
+
+    if (!cleanName || cleanName.length < 2) {
+      showToast('Please enter recipient full name (minimum 2 characters)', 'error');
       return;
     }
+    if (cleanPhone.length !== 10) {
+      showToast('Please enter a valid 10-digit mobile number', 'error');
+      return;
+    }
+    if (!cleanLine || cleanLine.length < 5) {
+      showToast('Please enter complete delivery street address', 'error');
+      return;
+    }
+    if (!cleanCity) {
+      showToast('Please enter your city', 'error');
+      return;
+    }
+    if (!cleanState) {
+      showToast('Please enter your state', 'error');
+      return;
+    }
+    if (cleanPin.length !== 6) {
+      showToast('Please enter a valid 6-digit postal pincode', 'error');
+      return;
+    }
+
     const created = await commerceDb.addAddress({
       ...newAddr,
+      full_name: cleanName,
+      phone: cleanPhone,
+      address_line: cleanLine,
+      city: cleanCity,
+      state: cleanState,
+      pincode: cleanPin,
       user_id: user?.uid,
       user_email: user?.email
     }, user);
+
     setAddresses([...addresses, created]);
     setSelectedAddressId(created.id);
     setShowAddAddressModal(false);
-    showToast('New delivery address added!', 'success');
+    showToast('New delivery address added & selected!', 'success');
   };
 
   const handleOpenEditAddress = (addr, e) => {
@@ -142,19 +177,109 @@ export function CheckoutPage() {
 
   const handleSaveEditedAddress = async (e) => {
     e.preventDefault();
-    if (!editingAddr || !editingAddr.full_name || !editingAddr.phone || !editingAddr.address_line) {
-      showToast('Please fill all required address fields', 'error');
+    if (!editingAddr) return;
+
+    const cleanName = (editingAddr.full_name || '').trim();
+    const cleanPhone = (editingAddr.phone || '').replace(/\D/g, '');
+    const cleanLine = (editingAddr.address_line || '').trim();
+    const cleanCity = (editingAddr.city || '').trim();
+    const cleanState = (editingAddr.state || '').trim();
+    const cleanPin = (editingAddr.pincode || '').replace(/\D/g, '');
+
+    if (!cleanName || cleanName.length < 2) {
+      showToast('Please enter recipient full name', 'error');
       return;
     }
+    if (cleanPhone.length !== 10) {
+      showToast('Please enter a valid 10-digit mobile number', 'error');
+      return;
+    }
+    if (!cleanLine || cleanLine.length < 5) {
+      showToast('Please enter complete delivery street address', 'error');
+      return;
+    }
+    if (!cleanCity) {
+      showToast('Please enter your city', 'error');
+      return;
+    }
+    if (!cleanState) {
+      showToast('Please enter your state', 'error');
+      return;
+    }
+    if (cleanPin.length !== 6) {
+      showToast('Please enter a valid 6-digit postal pincode', 'error');
+      return;
+    }
+
     const updated = await commerceDb.updateAddress(editingAddr.id, {
       ...editingAddr,
+      full_name: cleanName,
+      phone: cleanPhone,
+      address_line: cleanLine,
+      city: cleanCity,
+      state: cleanState,
+      pincode: cleanPin,
       user_id: user?.uid,
       user_email: user?.email
     });
+
     if (updated) {
       setAddresses((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       setShowEditAddressModal(false);
-      showToast('Address updated successfully!', 'success');
+      showToast('Delivery address updated successfully!', 'success');
+    }
+  };
+
+  const handleProceedToPayment = () => {
+    const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+    if (!selectedAddressId || !selectedAddress) {
+      showToast('Please select or add a delivery address to proceed', 'error');
+      return;
+    }
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleProceedToReview = () => {
+    const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+    if (!selectedAddressId || !selectedAddress) {
+      showToast('Please select a delivery address first', 'error');
+      setStep(1);
+      return;
+    }
+    if (!paymentMethod) {
+      showToast('Please select a payment method to proceed', 'error');
+      return;
+    }
+    setStep(3);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStepClick = (targetStep) => {
+    const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+    if (targetStep === 1) {
+      setStep(1);
+      return;
+    }
+    if (targetStep === 2) {
+      if (!selectedAddressId || !selectedAddress) {
+        showToast('Please select a delivery address first', 'error');
+        return;
+      }
+      setStep(2);
+      return;
+    }
+    if (targetStep === 3) {
+      if (!selectedAddressId || !selectedAddress) {
+        showToast('Please select a delivery address first', 'error');
+        return;
+      }
+      if (!paymentMethod) {
+        showToast('Please select a payment method first', 'error');
+        return;
+      }
+      setStep(3);
+      return;
     }
   };
 
@@ -163,6 +288,11 @@ export function CheckoutPage() {
     if (!selectedAddress) {
       showToast('Please select a delivery address to proceed', 'error');
       setStep(1);
+      return;
+    }
+    if (!paymentMethod) {
+      showToast('Please select a payment method to proceed', 'error');
+      setStep(2);
       return;
     }
     setShowConfirmModal(true);
@@ -445,29 +575,29 @@ export function CheckoutPage() {
         </div>
       </div>
 
-      {/* Checkout Progress Stepper */}
+      {/* Checkout Progress Stepper - 3 Distinct Guided Steps */}
       <div className="bg-white dark:bg-[#181818] p-4 sm:p-6 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 shadow-xs">
         <div className="flex items-center justify-between max-w-xl mx-auto">
           {[
-            { num: 1, label: 'Delivery Address' },
-            { num: 2, label: 'Payment Method' },
-            { num: 3, label: 'Order Review' }
+            { num: 1, label: '1. Delivery Address' },
+            { num: 2, label: '2. Payment Method' },
+            { num: 3, label: '3. Review & Confirm' }
           ].map((s, idx) => (
             <React.Fragment key={s.num}>
               <div
-                onClick={() => setStep(s.num)}
-                className={`flex items-center gap-2 cursor-pointer select-none ${
+                onClick={() => handleStepClick(s.num)}
+                className={`flex items-center gap-2 cursor-pointer select-none transition-all ${
                   step === s.num
-                    ? 'text-[#E63946] font-bold'
+                    ? 'text-[#E63946] font-bold scale-102'
                     : step > s.num
                     ? 'text-[#16A34A] font-semibold'
-                    : 'text-neutral-400 font-medium'
+                    : 'text-neutral-400 font-medium hover:text-neutral-600 dark:hover:text-neutral-300'
                 }`}
               >
                 <div
                   className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all ${
                     step === s.num
-                      ? 'border-[#E63946] bg-[#E63946] text-white shadow-xs'
+                      ? 'border-[#E63946] bg-[#E63946] text-white shadow-xs ring-4 ring-[#E63946]/15'
                       : step > s.num
                       ? 'border-[#16A34A] bg-[#16A34A] text-white'
                       : 'border-neutral-300 dark:border-neutral-700 bg-transparent text-neutral-400'
@@ -493,10 +623,13 @@ export function CheckoutPage() {
             <div className="bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 space-y-5">
               <div className="flex items-center justify-between border-b border-neutral-100 dark:border-neutral-800 pb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">
-                    Select Delivery Address
-                  </h2>
-                  <p className="text-xs text-neutral-500">Where should we deliver your order?</p>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-[#E63946] text-white text-[11px] font-bold flex items-center justify-center">1</span>
+                    <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">
+                      Select Delivery Address
+                    </h2>
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-0.5">Where should we deliver your order?</p>
                 </div>
                 <Button
                   onClick={() => setShowAddAddressModal(true)}
@@ -504,56 +637,79 @@ export function CheckoutPage() {
                   size="sm"
                   icon={Plus}
                 >
-                  Add New
+                  Add New Address
                 </Button>
               </div>
 
-              <div className="space-y-3">
-                {addresses.map((addr) => (
-                  <div
-                    key={addr.id}
-                    onClick={() => setSelectedAddressId(addr.id)}
-                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-start gap-3.5 relative ${
-                      selectedAddressId === addr.id
-                        ? 'border-[#E63946] bg-[#E63946]/5'
-                        : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="deliveryAddress"
-                      checked={selectedAddressId === addr.id}
-                      onChange={() => setSelectedAddressId(addr.id)}
-                      className="mt-1 w-4 h-4 text-[#E63946] focus:ring-[#E63946]"
-                    />
-                    <div className="flex-1 text-xs sm:text-sm pr-16 sm:pr-20">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <span className="font-bold text-neutral-900 dark:text-neutral-100">{addr.full_name}</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 uppercase">
-                          {addr.type}
-                        </span>
-                        {addr.is_default && (
-                          <span className="text-[10px] text-[#E63946] font-semibold">DEFAULT</span>
-                        )}
-                      </div>
-                      <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed">{addr.address_line}</p>
-                      <p className="text-neutral-600 dark:text-neutral-300">{addr.city}, {addr.state} - {addr.pincode}</p>
-                      <p className="text-neutral-500 text-xs mt-1.5 font-medium">Contact: {addr.phone}</p>
-                    </div>
-
-                    {/* Edit Address Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleOpenEditAddress(addr, e)}
-                      className="absolute top-4 right-4 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:text-[#E63946] hover:border-[#E63946] transition-colors cursor-pointer"
-                      title="Edit this address"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 text-[#E63946]" />
-                      <span>Edit</span>
-                    </button>
+              {addresses.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl border-2 border-dashed border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/40 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-[#E63946]/10 text-[#E63946] flex items-center justify-center mx-auto">
+                    <MapPin className="w-6 h-6 stroke-[2]" />
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <h3 className="font-bold text-base text-neutral-900 dark:text-neutral-100">No Delivery Address Found</h3>
+                    <p className="text-xs text-neutral-500 max-w-sm mx-auto mt-1">
+                      Please add your shipping address so we know where to deliver your package.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => setShowAddAddressModal(true)}
+                    variant="primary"
+                    size="md"
+                    icon={Plus}
+                    className="mt-2"
+                  >
+                    Add Delivery Address
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {addresses.map((addr) => (
+                    <div
+                      key={addr.id}
+                      onClick={() => setSelectedAddressId(addr.id)}
+                      className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-start gap-3.5 relative ${
+                        selectedAddressId === addr.id
+                          ? 'border-[#E63946] bg-[#E63946]/5 shadow-xs'
+                          : 'border-neutral-200 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="deliveryAddress"
+                        checked={selectedAddressId === addr.id}
+                        onChange={() => setSelectedAddressId(addr.id)}
+                        className="mt-1 w-4 h-4 text-[#E63946] focus:ring-[#E63946]"
+                      />
+                      <div className="flex-1 text-xs sm:text-sm pr-16 sm:pr-20">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-bold text-neutral-900 dark:text-neutral-100">{addr.full_name}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 uppercase">
+                            {addr.type}
+                          </span>
+                          {addr.is_default && (
+                            <span className="text-[10px] text-[#E63946] font-semibold">DEFAULT</span>
+                          )}
+                        </div>
+                        <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed">{addr.address_line}</p>
+                        <p className="text-neutral-600 dark:text-neutral-300">{addr.city}, {addr.state} - {addr.pincode}</p>
+                        <p className="text-neutral-500 text-xs mt-1.5 font-medium">Contact: {addr.phone}</p>
+                      </div>
+
+                      {/* Edit Address Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenEditAddress(addr, e)}
+                        className="absolute top-4 right-4 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:text-[#E63946] hover:border-[#E63946] transition-colors cursor-pointer"
+                        title="Edit this address"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-[#E63946]" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center justify-between pt-3 border-t border-neutral-100 dark:border-neutral-800">
                 <Button
@@ -566,13 +722,13 @@ export function CheckoutPage() {
                   Cancel Checkout
                 </Button>
                 <Button
-                  onClick={() => setStep(2)}
+                  onClick={handleProceedToPayment}
                   variant="primary"
                   size="md"
                   icon={ArrowRight}
                   iconPosition="right"
                 >
-                  Deliver to this Address
+                  Continue to Payment (Step 2)
                 </Button>
               </div>
             </div>
@@ -677,13 +833,13 @@ export function CheckoutPage() {
                   </Button>
                 </div>
                 <Button
-                  onClick={() => setStep(3)}
+                  onClick={handleProceedToReview}
                   variant="primary"
                   size="md"
                   icon={ArrowRight}
                   iconPosition="right"
                 >
-                  Review Order
+                  Continue to Review (Step 3)
                 </Button>
               </div>
             </div>
@@ -693,10 +849,13 @@ export function CheckoutPage() {
           {step === 3 && (
             <div className="bg-white dark:bg-[#181818] rounded-2xl border border-neutral-200/80 dark:border-neutral-800 p-5 sm:p-6 space-y-6">
               <div className="border-b border-neutral-100 dark:border-neutral-800 pb-4">
-                <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">
-                  Review & Confirm Order
-                </h2>
-                <p className="text-xs text-neutral-500">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#E63946] text-white text-[11px] font-bold flex items-center justify-center">3</span>
+                  <h2 className="text-lg font-bold text-neutral-900 dark:text-neutral-100">
+                    Review & Confirm Order
+                  </h2>
+                </div>
+                <p className="text-xs text-neutral-500 mt-0.5">
                   Please verify your items, delivery address, and payment method before placing.
                 </p>
               </div>
@@ -797,9 +956,9 @@ export function CheckoutPage() {
                   loading={placingOrder}
                   variant="primary"
                   size="lg"
-                  className="min-w-[190px]"
+                  className="min-w-[210px] font-bold shadow-md"
                 >
-                  Place Order (₹{totalAmount.toLocaleString('en-IN')})
+                  Place Order with Confirmation
                 </Button>
               </div>
             </div>
@@ -914,15 +1073,43 @@ export function CheckoutPage() {
               </div>
             </div>
 
-            <Button
-              onClick={promptOrderConfirmation}
-              variant="primary"
-              size="lg"
-              className="w-full mt-2"
-              loading={placingOrder}
-            >
-              Place Order (₹{totalAmount.toLocaleString('en-IN')})
-            </Button>
+            {step === 1 && (
+              <Button
+                onClick={handleProceedToPayment}
+                variant="primary"
+                size="lg"
+                className="w-full mt-2 font-bold shadow-xs"
+                icon={ArrowRight}
+                iconPosition="right"
+              >
+                Proceed to Payment (Step 2)
+              </Button>
+            )}
+
+            {step === 2 && (
+              <Button
+                onClick={handleProceedToReview}
+                variant="primary"
+                size="lg"
+                className="w-full mt-2 font-bold shadow-xs"
+                icon={ArrowRight}
+                iconPosition="right"
+              >
+                Continue to Review (Step 3)
+              </Button>
+            )}
+
+            {step === 3 && (
+              <Button
+                onClick={promptOrderConfirmation}
+                variant="primary"
+                size="lg"
+                className="w-full mt-2 font-bold shadow-md"
+                loading={placingOrder}
+              >
+                Place Order with Confirmation
+              </Button>
+            )}
 
             <div className="pt-2 text-[11px] text-neutral-400 flex items-center justify-center gap-1.5 text-center">
               <ShieldCheck className="w-4 h-4 text-[#16A34A] shrink-0" />
@@ -949,43 +1136,59 @@ export function CheckoutPage() {
         title="Confirm Your Order"
       >
         <div className="space-y-4 text-xs sm:text-sm">
-          <p className="text-neutral-600 dark:text-neutral-300">
-            Please confirm that you want to proceed with this order:
-          </p>
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <span>Please review and confirm your order details below. Your items will be dispatched immediately upon confirmation.</span>
+          </div>
 
-          <div className="bg-neutral-50 dark:bg-neutral-800/50 p-3.5 rounded-xl border border-neutral-200 dark:border-neutral-700 space-y-2">
+          <div className="bg-neutral-50 dark:bg-neutral-800/60 p-4 rounded-xl border border-neutral-200 dark:border-neutral-700 space-y-3">
             <div>
-              <span className="text-[10px] uppercase font-bold text-neutral-400 block">Deliver To</span>
-              <p className="font-bold text-neutral-900 dark:text-neutral-100">
-                {selectedAddress?.full_name} ({selectedAddress?.phone})
+              <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Shipping Address</span>
+              <p className="font-bold text-neutral-900 dark:text-neutral-100 text-sm">
+                {selectedAddress?.full_name} <span className="text-xs font-normal text-neutral-500">({selectedAddress?.type})</span>
               </p>
-              <p className="text-neutral-500 text-xs">
-                {selectedAddress?.address_line}, {selectedAddress?.city} - {selectedAddress?.pincode}
+              <p className="text-neutral-600 dark:text-neutral-400 text-xs mt-0.5">
+                {selectedAddress?.address_line}, {selectedAddress?.city}, {selectedAddress?.state} - {selectedAddress?.pincode}
               </p>
+              <p className="text-neutral-500 text-xs mt-1">Contact: <strong className="text-neutral-700 dark:text-neutral-300">{selectedAddress?.phone}</strong></p>
             </div>
 
-            <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-700/60 grid grid-cols-2 gap-2">
+            <div className="pt-2.5 border-t border-neutral-200/80 dark:border-neutral-700/80 grid grid-cols-2 gap-2">
               <div>
-                <span className="text-[10px] uppercase font-bold text-neutral-400 block">Payment Method</span>
-                <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+                <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Payment Method</span>
+                <span className="font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5 text-xs">
+                  {paymentMethod === 'Cash on Delivery' ? (
+                    <Banknote className="w-4 h-4 text-[#E63946]" />
+                  ) : (
+                    <CreditCard className="w-4 h-4 text-[#0D6EFD]" />
+                  )}
                   {paymentMethod}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold text-neutral-400 block">Total Payable</span>
-                <span className="font-black text-[#E63946] text-sm">
+                <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-0.5">Total Payable</span>
+                <span className="font-black text-[#E63946] text-base">
                   ₹{totalAmount.toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-neutral-200/60 dark:border-neutral-700/60">
-              <span className="text-[10px] uppercase font-bold text-neutral-400 block">
-                Selected Products ({checkoutItems.length})
+            <div className="pt-2.5 border-t border-neutral-200/80 dark:border-neutral-700/80">
+              <span className="text-[10px] uppercase font-bold text-neutral-400 block mb-1">
+                Ordered Items ({checkoutItems.length})
               </span>
-              <p className="text-xs text-neutral-700 dark:text-neutral-300 truncate">
-                {checkoutItems.map((i) => i.name).join(', ')}
-              </p>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 divide-y divide-neutral-100 dark:divide-neutral-800">
+                {checkoutItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs py-1">
+                    <span className="truncate max-w-[200px] text-neutral-800 dark:text-neutral-200 font-medium">
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span className="font-bold text-neutral-900 dark:text-neutral-100 shrink-0">
+                      ₹{(item.price * item.quantity).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -996,14 +1199,14 @@ export function CheckoutPage() {
               size="md"
               onClick={() => setShowConfirmModal(false)}
             >
-              Review Details
+              Back to Review
             </Button>
             <Button
               type="button"
               variant="primary"
               size="md"
               onClick={handleConfirmOrder}
-              className="min-w-[150px]"
+              className="min-w-[170px] font-bold shadow-md"
             >
               {paymentMethod === 'Online Payment (Razorpay)'
                 ? 'Proceed to Razorpay'
@@ -1046,13 +1249,14 @@ export function CheckoutPage() {
 
             <div>
               <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                Mobile Number *
+                Mobile Number (10 digits) *
               </label>
               <input
                 type="tel"
                 value={editingAddr.phone || ''}
-                onChange={(e) => setEditingAddr({ ...editingAddr, phone: e.target.value })}
-                placeholder="+91 98765 43210"
+                onChange={(e) => setEditingAddr({ ...editingAddr, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                placeholder="10-digit mobile number"
+                maxLength={10}
                 required
                 className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
               />
@@ -1060,7 +1264,7 @@ export function CheckoutPage() {
 
             <div>
               <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-                Address Details *
+                Flat / House / Street Address *
               </label>
               <textarea
                 value={editingAddr.address_line || ''}
@@ -1072,7 +1276,7 @@ export function CheckoutPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                   City *
@@ -1081,6 +1285,20 @@ export function CheckoutPage() {
                   type="text"
                   value={editingAddr.city || ''}
                   onChange={(e) => setEditingAddr({ ...editingAddr, city: e.target.value })}
+                  placeholder="e.g. Bengaluru"
+                  required
+                  className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
+                  State *
+                </label>
+                <input
+                  type="text"
+                  value={editingAddr.state || ''}
+                  onChange={(e) => setEditingAddr({ ...editingAddr, state: e.target.value })}
+                  placeholder="e.g. Karnataka"
                   required
                   className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
                 />
@@ -1092,7 +1310,8 @@ export function CheckoutPage() {
                 <input
                   type="text"
                   value={editingAddr.pincode || ''}
-                  onChange={(e) => setEditingAddr({ ...editingAddr, pincode: e.target.value })}
+                  onChange={(e) => setEditingAddr({ ...editingAddr, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                  placeholder="6-digit PIN"
                   required
                   maxLength={6}
                   className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
@@ -1160,13 +1379,14 @@ export function CheckoutPage() {
 
           <div>
             <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-              Mobile Number *
+              Mobile Number (10 digits) *
             </label>
             <input
               type="tel"
               value={newAddr.phone}
-              onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value })}
-              placeholder="+91 98765 43210"
+              onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+              placeholder="10-digit mobile number"
+              maxLength={10}
               required
               className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
             />
@@ -1174,7 +1394,7 @@ export function CheckoutPage() {
 
           <div>
             <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
-              Flat / House No. / Building / Street *
+              Flat / House / Street Address *
             </label>
             <textarea
               value={newAddr.address_line}
@@ -1186,7 +1406,7 @@ export function CheckoutPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                 City *
@@ -1195,6 +1415,20 @@ export function CheckoutPage() {
                 type="text"
                 value={newAddr.city}
                 onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
+                placeholder="e.g. Bengaluru"
+                required
+                className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1">
+                State *
+              </label>
+              <input
+                type="text"
+                value={newAddr.state}
+                onChange={(e) => setNewAddr({ ...newAddr, state: e.target.value })}
+                placeholder="e.g. Karnataka"
                 required
                 className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
               />
@@ -1206,7 +1440,8 @@ export function CheckoutPage() {
               <input
                 type="text"
                 value={newAddr.pincode}
-                onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value })}
+                onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                placeholder="6-digit PIN"
                 required
                 maxLength={6}
                 className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-2.5"
